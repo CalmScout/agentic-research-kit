@@ -1,0 +1,237 @@
+"""Direct LightRAG retriever using local embedding models.
+
+This module provides direct access to LightRAG without using the HTTP server.
+It uses local Qwen3-VL embedding models for query embedding and retrieval.
+"""
+
+import asyncio
+import logging
+from typing import Dict, Any, List, Callable
+from pathlib import Path
+import numpy as np
+
+from lightrag import LightRAG, QueryParam
+from lightrag.utils import EmbeddingFunc
+
+from src.utils.vision_embedding import Qwen3VLEmbedding, get_qwen2_llm
+
+logger = logging.getLogger(__name__)
+
+
+class DirectLightRAGRetriever:
+    """Direct LightRAG retriever using local embedding models.
+
+    This avoids the HTTP server and works entirely with local models.
+    """
+
+    def __init__(self, working_dir: str = "./rag_storage", device: str = "cuda"):
+        """Initialize direct LightRAG retriever.
+
+        Args:
+            working_dir: Path to LightRAG storage directory
+            device: Device to use for embeddings ("cuda" or "cpu")
+        """
+        self.working_dir = Path(working_dir)
+        self.device = device
+        self._rag: LightRAG = None
+        self._embedding_model: Qwen3VLEmbedding = None
+
+    def _get_embedding_model(self) -> Qwen3VLEmbedding:
+        """Get or create embedding model instance (lazy loading)."""
+        if self._embedding_model is None:
+            logger.info(f"Loading local embedding model: Qwen/Qwen3-VL-Embedding-2B")
+            self._embedding_model = Qwen3VLEmbedding(
+                model_name="Qwen/Qwen3-VL-Embedding-2B",
+                device=self.device,
+                torch_dtype="float16"  # Use float16 instead of "auto"
+            )
+            # Test embedding to get dimension
+            test_emb = self._embedding_model.embed_text("test")
+            logger.info(f"✓ Embedding model loaded (dimension: {test_emb.shape[0]})")
+
+        return self._embedding_model
+
+    async def _embed_with_local_model(self, texts: list) -> np.ndarray:
+        """Generate embeddings using local Qwen3-VL model.
+
+        Args:
+            texts: List of text strings to embed
+
+        Returns:
+            2D Numpy array with shape (num_texts, embedding_dim)
+        """
+        embedding_model = self._get_embedding_model()
+        embeddings = []
+
+        for text in texts:
+            try:
+                embedding = embedding_model.embed_text(text)
+                embeddings.append(embedding)
+            except Exception as e:
+                logger.error(f"Embedding error for text '{text[:50]}...': {e}")
+                # Return zero vector on error
+                embeddings.append(np.zeros(2048, dtype=np.float32))
+
+        # Convert list of 1D arrays to 2D numpy array
+        return np.vstack(embeddings).astype(np.float32)
+
+    def _create_llm_model_func(self) -> Callable:
+        """Create async LLM function compatible with LightRAG.
+
+        Returns an async function that LightRAG can call for entity extraction
+        and knowledge graph operations during queries.
+
+        The function signature must match LightRAG's expectations:
+            async def llm_model_func(
+                prompt: str,
+                system_prompt: str = None,
+                history_messages: list = None,
+                **kwargs
+            ) -> str
+        """
+        async def llm_model_func(
+            prompt: str,
+            system_prompt: str = None,
+            history_messages: list = None,
+            **kwargs
+        ) -> str:
+            """LLM function for LightRAG entity extraction."""
+            try:
+                # Lazy load LLM on first call (uses singleton from vision_embedding.py)
+                if not hasattr(self, '_llm'):
+                    logger.info("Initializing Qwen2.5-1.5B for LightRAG LLM operations...")
+                    self._llm = get_qwen2_llm(
+                        model_name="Qwen/Qwen2.5-1.5B-Instruct",
+                        device=self.device
+                    )
+                    logger.info("✓ LightRAG LLM initialized")
+
+                # Generate response using sync call in async context
+                # The Qwen2TextLLM.generate() is synchronous, so we can call it directly
+                response = self._llm.generate(
+                    prompt=prompt,
+                    system_prompt=system_prompt,
+                    temperature=0.0,
+                    max_tokens=512
+                )
+                return response
+
+            except Exception as e:
+                logger.error(f"LLM function error: {e}", exc_info=True)
+                # Return fallback for entity extraction
+                return ""
+
+        return llm_model_func
+
+    def get_rag(self) -> LightRAG:
+        """Get or create LightRAG instance.
+
+        Returns:
+            LightRAG instance configured with local embedding model
+        """
+        if self._rag is None:
+            logger.info(f"Initializing LightRAG with local models (working_dir: {self.working_dir})")
+
+            # Create embedding function
+            embedding_func = EmbeddingFunc(
+                embedding_dim=2048,  # Qwen3-VL-Embedding-2B dimension
+                max_token_size=8192,
+                func=self._embed_with_local_model,
+            )
+
+            # Create LLM function for entity extraction
+            llm_model_func = self._create_llm_model_func()
+
+            # Initialize LightRAG with both embedding and LLM functions
+            self._rag = LightRAG(
+                working_dir=str(self.working_dir),
+                llm_model_func=llm_model_func,
+                embedding_func=embedding_func,
+            )
+
+            logger.info("✓ LightRAG initialized successfully")
+
+        return self._rag
+
+    async def retrieve(self, query: str, top_k: int = 50, mode: str = "naive") -> Dict[str, Any]:
+        """Retrieve documents using LightRAG.
+
+        Args:
+            query: User query
+            top_k: Number of documents to retrieve
+            mode: Retrieval mode ("naive", "local", "global", "hybrid")
+
+        Returns:
+            Dict with keys: retrieved_docs, retrieval_scores, retrieval_method
+        """
+        rag = self.get_rag()
+
+        logger.info(f"Querying LightRAG directly (mode={mode}, top_k={top_k})")
+
+        try:
+            # Perform retrieval using LightRAG
+            # Use aquery_data for structured retrieval results
+            result = await rag.aquery_data(
+                query,
+                param=QueryParam(mode=mode)
+            )
+
+            # Parse result to extract documents
+            # aquery_data returns: {"status": "success", "data": {"chunks": [...], ...}}
+            documents = []
+            scores = []
+
+            if isinstance(result, dict):
+                data = result.get("data", {})
+                chunks = data.get("chunks", [])
+                
+                # Support old format if needed
+                if not chunks and "context" in result:
+                    context = result["context"]
+                    if isinstance(context, list):
+                        chunks = context
+                    elif isinstance(context, str):
+                        chunks = [{"content": c.strip()} for c in context.split("\n\n") if c.strip()]
+
+                for i, item in enumerate(chunks):
+                    if isinstance(item, dict):
+                        doc = {
+                            "text": item.get("content", item.get("text", str(item))),
+                            "score": item.get("score", 1.0 - (i * 0.01)),
+                            "metadata": {
+                                "source": "lightrag_direct",
+                                "mode": mode,
+                                "file_path": item.get("file_path", ""),
+                                "chunk_id": item.get("chunk_id", "")
+                            },
+                        }
+                        documents.append(doc)
+                        scores.append(doc["score"])
+
+            logger.info(f"✓ Retrieved {len(documents)} documents from LightRAG (direct, mode={mode})")
+
+            return {
+                "retrieved_docs": documents,
+                "retrieval_scores": scores,
+                "retrieval_method": f"hybrid_{mode}",
+            }
+
+        except Exception as e:
+            logger.error(f"Direct LightRAG retrieval failed: {e}", exc_info=True)
+            raise RuntimeError(f"Failed to retrieve using direct LightRAG: {e}")
+
+
+# Singleton instance
+_retriever: DirectLightRAGRetriever = None
+
+
+def get_direct_lightrag_retriever() -> DirectLightRAGRetriever:
+    """Get singleton direct LightRAG retriever instance.
+
+    Returns:
+        DirectLightRAGRetriever: Shared retriever instance
+    """
+    global _retriever
+    if _retriever is None:
+        _retriever = DirectLightRAGRetriever()
+    return _retriever

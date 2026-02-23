@@ -1,0 +1,200 @@
+[project]
+name = "agentic-research-kit"
+version = "0.1.0"
+description = "Universal agentic RAG system for deep research and analysis"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [
+    { name = "Anton Popov", email = "popovanton567@gmail.com" }
+]
+keywords = ["rag", "multimodal", "agents", "research", "langgraph", "knowledge-graph"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    # -----------------------------------------------------------------------------
+    # RAG Framework
+    # -----------------------------------------------------------------------------
+    "lightrag-hku>=1.4.0",
+    # -----------------------------------------------------------------------------
+    # Agent Framework
+    # -----------------------------------------------------------------------------
+    "langgraph>=0.2.0",
+    "langchain-openai>=0.1.0", # For DeepSeek API (OpenAI-compatible)
+    "langchain-core>=0.2.0",
+    # -----------------------------------------------------------------------------
+    # HuggingFace Models (GPU-accelerated Qwen3)
+    # -----------------------------------------------------------------------------
+    "transformers[torch]>=4.57.0,<5.0.0", # Qwen3-VL requires 4.57+, but 5.0.0.dev has breaking changes
+    "qwen-vl-utils>=0.0.14", # Qwen3-VL utilities
+    "torch>=2.5.0", # PyTorch with CUDA support
+    "torchvision>=0.19.0", # Image processing for vision models
+    "accelerate>=1.1.0", # For device_map="auto" GPU distribution
+    "bitsandbytes>=0.41.0", # For 8-bit quantization
+    "sentencepiece>=0.2.0", # Tokenizer for Qwen3 models
+    "optimum>=1.23.0", # Quantization support (optional)
+    # -----------------------------------------------------------------------------
+    # API Framework
+    # -----------------------------------------------------------------------------
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    # -----------------------------------------------------------------------------
+    # CLI Framework
+    # -----------------------------------------------------------------------------
+    "click>=8.1.0",
+    # -----------------------------------------------------------------------------
+    # Utilities
+    # -----------------------------------------------------------------------------
+    "aiohttp>=3.9.0", # Async HTTP for image downloads
+    "pandas>=2.0.0", # Data manipulation
+    "numpy>=1.24.0",
+    "python-dotenv>=1.0.0", # Environment variables
+    "PyJWT>=2.0.0", # JWT authentication (required by LightRAG API server)
+    "aiofiles>=24.0.0", # Async file operations (required by LightRAG API server)
+    "structlog>=24.1.0", # Structured logging
+    "loguru>=0.7.0", # Enhanced logging (complements Phoenix)
+    "tenacity>=8.2.0", # Retry logic with exponential backoff
+    "tqdm>=4.66.0", # Progress bars
+    "openai>=1.0.0", # For DeepSeek API compatibility
+    # -----------------------------------------------------------------------------
+    # Evaluation
+    # -----------------------------------------------------------------------------
+    "ragas>=0.2.0",
+    # -----------------------------------------------------------------------------
+    # Observability
+    # -----------------------------------------------------------------------------
+    "arize-phoenix>=4.0.0",
+    "openinference-instrumentation-langchain>=0.1.0",
+    "opentelemetry-sdk>=1.22.0",
+    "opentelemetry-api>=1.22.0",
+    # -----------------------------------------------------------------------------
+    # Image Processing
+    # -----------------------------------------------------------------------------
+    "pillow>=10.0.0",
+    # -----------------------------------------------------------------------------
+    # Document Processing
+    # -----------------------------------------------------------------------------
+    "pymupdf>=1.23.0", # PDF processing (fast, comprehensive)
+    "python-docx>=1.0.0", # Word document support
+    "beautifulsoup4>=4.12.0", # HTML parsing
+    "markdown>=3.5.0", # Markdown support
+    "lxml>=4.9.0", # XML parsing (for DOCX/HTML)
+    "mcp>=1.26.0",
+    "httpx>=0.28.1",
+    "json-repair>=0.55.0",
+    "litellm>=1.81.13",
+    "readability-lxml>=0.8.4.1",
+    "python-telegram-bot>=22.6",
+]
+
+# -----------------------------------------------------------------------------
+# Optional Dependencies
+# -----------------------------------------------------------------------------
+[project.optional-dependencies]
+ollama = [
+    "langchain-community>=0.3.0",  # Ollama LLM support
+]
+
+# -----------------------------------------------------------------------------
+# Development Dependencies
+# -----------------------------------------------------------------------------
+[tool.uv]
+dev-dependencies = [
+    "pytest>=7.4.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.1.0",
+    "black>=24.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.8.0",
+    "agentic-research-kit[ollama]",  # Include optional dependencies
+]
+
+# -----------------------------------------------------------------------------
+# CLI Entry Points
+# -----------------------------------------------------------------------------
+[project.scripts]
+ark = "main:cli"
+
+# -----------------------------------------------------------------------------
+# Tool Configurations
+# -----------------------------------------------------------------------------
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Set to true in production
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+asyncio_mode = "auto"
+
+# -----------------------------------------------------------------------------
+# Coverage Configuration
+# -----------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/foundation/*",
+    "*/test_*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstract",
+]
+fail_under = 70
+show_missing = true
+precision = 2
+
+# -----------------------------------------------------------------------------
+# Build System
+# -----------------------------------------------------------------------------
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch]
+metadata.allow-direct-references = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]

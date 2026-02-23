@@ -1,0 +1,270 @@
+"""Model selector for multi-provider LLM strategy.
+
+Implements intelligent model selection with automatic fallback:
+- Supports: DeepSeek, OpenAI, Ollama, local Qwen3-8B
+- Configurable provider chain with automatic fallback
+- Zero abstraction overhead with direct API calls
+"""
+
+import logging
+from typing import Literal, Optional, Any, List
+from langchain_core.messages import BaseMessage, AIMessage, SystemMessage
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_openai import ChatOpenAI
+
+from src.utils.config import Settings
+from src.agents.providers import find_by_name, find_by_model, ProviderSpec
+
+# Import Ollama support (optional)
+try:
+    from langchain_community.chat_models import ChatOllama
+    OLLAMA_AVAILABLE = True
+except ImportError:
+    OLLAMA_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("langchain-community not installed, Ollama support unavailable")
+
+logger = logging.getLogger(__name__)
+
+
+class Qwen2LangChainWrapper(BaseChatModel):
+    """LangChain-compatible wrapper for Qwen2TextLLM.
+
+    Adapts the existing Qwen2TextLLM to work with LangChain's async interface.
+    """
+
+    qwen2_llm: Any = None  # Make qwen2_llm a class attribute for Pydantic
+
+    model_config = {
+        "arbitrary_types_allowed": True
+    }
+
+    def __init__(self, qwen2_llm, **kwargs):
+        """Initialize wrapper.
+
+        Args:
+            qwen2_llm: Qwen2TextLLM instance
+            **kwargs: Additional parameters
+        """
+        super().__init__(qwen2_llm=qwen2_llm, **kwargs)
+
+    def _generate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate response (synchronous).
+
+        Args:
+            messages: List of messages
+            stop: Stop sequences
+            run_manager: Run manager
+            **kwargs: Additional parameters
+
+        Returns:
+            ChatResult with generation
+        """
+        # Extract text from messages
+        prompt = "\n".join([m.content for m in messages])
+
+        # Generate using Qwen2 (generate() accepts max_tokens param, maps to max_new_tokens internally)
+        response_text = self.qwen2_llm.generate(
+            prompt,
+            max_tokens=self.qwen2_llm.max_new_tokens,
+        )
+
+        # Create AIMessage
+        ai_message = AIMessage(content=response_text)
+
+        # Return ChatResult (newer LangChain API)
+        return ChatResult(generations=[ChatGeneration(message=ai_message)])
+
+    async def _agenerate(
+        self,
+        messages: List[BaseMessage],
+        stop: Optional[List[str]] = None,
+        run_manager: Optional[Any] = None,
+        **kwargs: Any,
+    ) -> ChatResult:
+        """Generate response (async).
+
+        Args:
+            messages: List of messages
+            stop: Stop sequences
+            run_manager: Run manager
+            **kwargs: Additional parameters
+
+        Returns:
+            ChatResult with generation
+        """
+        import asyncio
+        return await asyncio.get_event_loop().run_in_executor(
+            None, self._generate, messages, stop, run_manager, **kwargs
+        )
+
+    @property
+    def _llm_type(self) -> str:
+        """Return LLM type identifier."""
+        return "qwen2_langchain_wrapper"
+
+
+
+class ModelSelector:
+    """Selects appropriate LLM based on configuration and availability.
+
+    Implements multi-provider strategy:
+    1. Try primary provider (DeepSeek, OpenAI, Ollama, or local)
+    2. Fallback through configured provider chain
+    3. Final fallback to local Qwen3-8B
+    4. Configurable via environment variables
+    """
+
+    def __init__(self, settings: Optional[Settings] = None):
+        """Initialize model selector.
+
+        Args:
+            settings: Application settings (uses defaults if None)
+        """
+        self.settings = settings or Settings()
+        self._local_llm: Optional[BaseChatModel] = None
+        self._provider_cache: dict = {}  # Cache for provider instances
+
+    def get_local_llm(self) -> BaseChatModel:
+        """Get local Qwen3-8B model for fast, cost-free inference.
+
+        Returns:
+            BaseChatModel: Local Qwen3-8B model instance (LangChain-compatible)
+
+        Raises:
+            RuntimeError: If local model cannot be initialized
+        """
+        if self._local_llm is None:
+            try:
+                from src.utils.vision_embedding import get_qwen2_llm
+
+                logger.info("Initializing local Qwen3-8B model...")
+                qwen2_llm = get_qwen2_llm()
+                # Wrap in LangChain-compatible interface
+                self._local_llm = Qwen2LangChainWrapper(qwen2_llm)
+                logger.info("✓ Local Qwen3-8B model initialized (LangChain wrapper)")
+            except Exception as e:
+                logger.error(f"Failed to initialize local LLM: {e}")
+                raise RuntimeError(f"Local LLM initialization failed: {e}")
+
+        return self._local_llm
+
+    def get_llm_for_provider(self, provider_name: str) -> BaseChatModel:
+        """Get LLM instance for specified provider using registry.
+
+        Args:
+            provider_name: Provider name (deepseek, openai, ollama, local, etc.)
+
+        Returns:
+            BaseChatModel: Provider-specific LLM instance
+
+        Raises:
+            ValueError: If provider unknown or credentials missing
+            RuntimeError: If provider cannot be initialized
+        """
+        # Check cache
+        if provider_name in self._provider_cache:
+            return self._provider_cache[provider_name]
+
+        spec = find_by_name(provider_name)
+        if not spec:
+            raise ValueError(f"Unknown provider: {provider_name}")
+
+        logger.info(f"Initializing LLM for provider: {spec.label}")
+
+        if spec.name == "local":
+            llm = self.get_local_llm()
+        elif spec.name == "ollama":
+            if not OLLAMA_AVAILABLE:
+                raise RuntimeError("Ollama support (langchain-community) not installed")
+            llm = ChatOllama(
+                model=self.settings.ollama_model,
+                base_url=self.settings.ollama_base_url,
+                temperature=0.0,
+            )
+        else:
+            # Handle API providers (OpenAI-compatible)
+            api_key = getattr(self.settings, f"{spec.name}_api_key", None)
+            if not api_key:
+                # Fallback to direct env var check
+                import os
+                api_key = os.environ.get(spec.env_key)
+
+            if not api_key:
+                raise ValueError(f"API key missing for provider {spec.name} (checked {spec.env_key})")
+
+            # Get model name from settings or default
+            model_name = getattr(self.settings, f"{spec.name}_model", None)
+            if not model_name:
+                # Default model names if not in settings
+                defaults = {"deepseek": "deepseek-chat", "openai": "gpt-4"}
+                model_name = defaults.get(spec.name, "gpt-4")
+
+            base_url = getattr(self.settings, f"{spec.name}_base_url", spec.default_api_base)
+
+            llm = ChatOpenAI(
+                model=model_name,
+                api_key=api_key,
+                base_url=base_url if base_url else None,
+                temperature=0.0,
+            )
+
+        logger.info(f"✓ {spec.label} LLM initialized")
+        self._provider_cache[provider_name] = llm
+        return llm
+
+    def get_llm_with_fallback(self) -> BaseChatModel:
+        """Get LLM with automatic fallback.
+
+        Strategy:
+        1. Use configured primary provider from settings
+        2. Fallback through provider chain if available
+        3. Final fallback to local Qwen3-8B
+
+        Returns:
+            BaseChatModel: Selected LLM instance
+        """
+        # Determine primary provider
+        primary_provider = self.settings.llm_provider
+
+        # Get fallback chain
+        fallback_providers = getattr(self.settings, 'fallback_providers', ['local'])
+
+        # Try primary provider
+        try:
+            return self.get_llm_for_provider(primary_provider)
+        except Exception as e:
+            logger.warning(f"Primary provider {primary_provider} failed: {e}")
+
+        # Try fallback providers
+        for provider in fallback_providers:
+            try:
+                logger.info(f"Trying fallback provider: {provider}")
+                return self.get_llm_for_provider(provider)
+            except Exception as e:
+                logger.warning(f"Fallback provider {provider} failed: {e}")
+                continue
+
+        # All providers failed
+        raise RuntimeError(
+            f"All LLM providers failed. Tried: {primary_provider}, {fallback_providers}"
+        )
+
+
+# Singleton instance for efficiency
+_selector: Optional[ModelSelector] = None
+
+
+def get_model_selector() -> ModelSelector:
+    """Get singleton model selector instance."""
+    global _selector
+    if _selector is None:
+        _selector = ModelSelector()
+    return _selector

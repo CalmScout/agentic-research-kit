@@ -1,0 +1,93 @@
+"""Generic agent state management for multi-agent RAG workflows.
+
+Defines the base state that flows through all agents using LangGraph's
+state management. Domain-specific states can extend this base.
+"""
+
+from typing import TypedDict, List, Optional, Dict, Any
+from langgraph.graph import add_messages
+
+
+class BaseAgentState(TypedDict):
+    """Generic base state for multi-agent RAG workflows.
+
+    This state flows through all 2 agents:
+    1. Enhanced Retriever → Extracts entities, generates embeddings, and retrieves documents
+    2. Enhanced Response Generator → Reranks, synthesizes evidence, and generates response
+
+    The state is designed to be domain-agnostic. For domain-specific use cases,
+    create a subclass that adds additional fields.
+
+    Attributes:
+        query: User's original query (text)
+        query_image: Optional image for multimodal queries
+        retrieval_mode: LightRAG retrieval strategy (naive, local, global, hybrid)
+        query_type: Query modality ("text" or "multimodal")
+        entities: Extracted entities (people, orgs, locations, concepts)
+        query_embedding: Vector representation of query
+        retrieved_docs: Documents retrieved from RAG system
+        retrieval_scores: Similarity scores for retrieved docs
+        retrieval_method: Search method used ("vector", "bm25", "hybrid", "keyword")
+        reranked_docs: Top-K documents after reranking
+        evidence_summary: Synthesized evidence from top results
+        top_results: Top K most relevant results
+        response: Final generated response
+        sources: Source documents for citation
+        messages: LangGraph message history (auto-annotated)
+    """
+
+    # -------------------------------------------------------------------------
+    # Input
+    # -------------------------------------------------------------------------
+    query: str
+    query_image: Optional[str]
+    retrieval_mode: Optional[str]  # LightRAG mode: naive, local, global, hybrid
+    memory_context: Optional[str]  # Research context from memory store
+
+    # -------------------------------------------------------------------------
+    # Agent 1: Enhanced Retriever output
+    # -------------------------------------------------------------------------
+    query_type: str  # "text" or "multimodal"
+    entities: List[str]
+    query_embedding: List[float]
+    retrieved_docs: List[dict]
+    retrieval_scores: List[float]
+    retrieval_method: str  # "vector", "bm25", "hybrid", "keyword"
+
+    # -------------------------------------------------------------------------
+    # Agent 2: Enhanced Response Generator output
+    # -------------------------------------------------------------------------
+    reranked_docs: List[dict]
+    evidence_summary: str
+    top_results: List[dict]
+    response: str
+    sources: List[dict]
+
+    # -------------------------------------------------------------------------
+    # LangGraph message history (auto-annotated for automatic reduction)
+    # -------------------------------------------------------------------------
+    messages: add_messages  # type: ignore
+
+
+class ResearchState(BaseAgentState):
+    """Domain-specific state for research and analysis use cases.
+
+    Extends BaseAgentState with research-specific fields.
+    """
+
+    # Research-specific fields
+    research_methodology: Optional[str] = None
+    cited_works: Optional[List[str]] = None
+    limitations: Optional[List[str]] = None
+
+
+class LegacyClaimState(BaseAgentState):
+    """Legacy state for claim verification use cases (backward compatibility).
+
+    Extends BaseAgentState with claim-specific fields.
+    """
+
+    # Claim-specific fields
+    claim_verdict: Optional[str] = None
+    fact_check_url: Optional[str] = None
+    top_claims: Optional[List[dict]] = None  # Deprecated: Use top_results instead

@@ -5,11 +5,10 @@ Adapts nanobot's two-layer memory pattern for RAG research use cases:
 - QUERY_HISTORY.md - Grep-searchable log of all queries with metrics
 """
 
-import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Any, List, Optional
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +44,7 @@ class MemoryStore:
         self.history_file = self.memory_dir / "QUERY_HISTORY.md"
 
         import lancedb
+
         self.db = lancedb.connect(self.memory_dir / "lancedb")
         self.table_name = "research_memory"
 
@@ -86,10 +86,10 @@ class MemoryStore:
         try:
             if self.table_name in self.db.list_tables():
                 self.db.drop_table(self.table_name)
-                
+
             sections = content.split("## Finding")
             data = []
-            
+
             # Lazy load embedder
             try:
                 from src.agents.embeddings import embedder
@@ -107,10 +107,10 @@ class MemoryStore:
                     timestamp = lines[0].split("]")[0].strip("[")
                     if len(lines) > 1:
                         text = lines[1].strip()
-                
+
                 vector = embedder.embed_text(text)
                 data.append({"vector": vector, "text": text, "timestamp": timestamp})
-                
+
             if data:
                 self.db.create_table(self.table_name, data)
                 logger.info(f"Re-indexed {len(data)} findings in LanceDB")
@@ -129,11 +129,12 @@ class MemoryStore:
         with open(self.memory_file, "a", encoding="utf-8") as f:
             f.write(entry)
 
-        logger.debug(f"Appended research finding to memory")
-        
+        logger.debug("Appended research finding to memory")
+
         # Index in LanceDB
         try:
             from src.agents.embeddings import embedder
+
             vector = embedder.embed_text(finding)
             data = [{"vector": vector, "text": finding, "timestamp": timestamp}]
             if self.table_name in self.db.list_tables():
@@ -150,10 +151,7 @@ class MemoryStore:
     # -------------------------------------------------------------------------
 
     def append_query_history(
-        self,
-        query: str,
-        result: Dict[str, Any],
-        session_id: Optional[str] = None
+        self, query: str, result: dict[str, Any], session_id: str | None = None
     ) -> None:
         """Log query with metrics to history file.
 
@@ -165,7 +163,7 @@ class MemoryStore:
         timestamp = datetime.now().isoformat()
 
         # Extract metrics
-        sources_count = len(result.get("sources", []))
+        sources_count = len(cast(list, result.get("sources", [])))
         retrieved_count = result.get("retrieved_count", 0)
 
         # Build entry
@@ -185,7 +183,7 @@ class MemoryStore:
 
 """
         # Add source summaries
-        for i, source in enumerate(result.get("sources", [])[:3], 1):
+        for i, source in enumerate(cast(list, result.get("sources", []))[:3], 1):
             url = source.get("url", source.get("source", "Unknown"))
             text = source.get("text", source.get("content", ""))[:100]
             entry += f"{i}. {text}... [{url}]\n"
@@ -202,7 +200,9 @@ class MemoryStore:
     # Context Retrieval
     # -------------------------------------------------------------------------
 
-    def get_research_context(self, query: str = None, max_chars: int = 2000, top_k: int = 5) -> str:
+    def get_research_context(
+        self, query: str | None = None, max_chars: int = 2000, top_k: int = 5
+    ) -> str:
         """Get research context for query enhancement.
 
         Args:
@@ -228,27 +228,29 @@ class MemoryStore:
         # Semantic Retrieval
         try:
             from src.agents.embeddings import embedder
+
             vector = embedder.embed_text(query)
             tbl = self.db.open_table(self.table_name)
             results = tbl.search(vector).limit(top_k).to_list()
-            
+
             if not results:
                 return ""
-                
+
             context = "## Research Context (Relevant Past Findings)\n\n"
             for r in results:
-                context += f"### Finding [{r.get('timestamp', 'Unknown')}]\n{r.get('text', '')}\n\n"
+                context += f"### Finding [{cast(dict, r).get('timestamp', 'Unknown')}]\n{cast(dict, r).get('text', '')}\n\n"
             return context
         except Exception as e:
             logger.error(f"Failed to retrieve context from LanceDB: {e}")
             # Fallback
             long_term = self.read_long_term()
-            if not long_term: return ""
+            if not long_term:
+                return ""
             if len(long_term) > max_chars:
                 long_term = long_term[:max_chars] + "\n\n...(truncated)"
             return f"## Research Context\n\n{long_term}"
 
-    def get_recent_queries(self, count: int = 5) -> List[Dict[str, Any]]:
+    def get_recent_queries(self, count: int = 5) -> list[dict[str, Any]]:
         """Get recent queries from history file.
 
         Args:
@@ -278,10 +280,7 @@ class MemoryStore:
                 if line.startswith("- **Timestamp**"):
                     timestamp = line.split(":")[1].strip()
 
-            recent_queries.append({
-                "query": query,
-                "timestamp": timestamp
-            })
+            recent_queries.append({"query": query, "timestamp": timestamp})
 
         return recent_queries
 
@@ -289,11 +288,7 @@ class MemoryStore:
     # Session Consolidation
     # -------------------------------------------------------------------------
 
-    async def consolidate_session(
-        self,
-        session_queries: List[Dict[str, Any]],
-        llm=None
-    ) -> str:
+    async def consolidate_session(self, session_queries: list[dict[str, Any]], llm=None) -> str:
         """Consolidate session queries into research findings.
 
         Uses LLM to identify research patterns and extract key findings.
@@ -323,7 +318,7 @@ class MemoryStore:
             query_text = q.get("query", "Unknown")
             response_text = q.get("response", "No response")
             lines.append(f"Query: {query_text}\nResponse: {response_text}\n")
-        
+
         conversation = "\n".join(lines)
         current_memory = self.read_long_term()
 
@@ -342,30 +337,34 @@ Return a JSON object with exactly two keys:
 **IMPORTANT**: Respond with ONLY valid JSON, no markdown fences.
 """
         try:
-            from langchain_core.messages import HumanMessage, SystemMessage
             import json_repair
+            from langchain_core.messages import HumanMessage, SystemMessage
 
-            response = await llm.ainvoke([
-                SystemMessage(content="You are a research consolidation expert. Respond only with valid JSON."),
-                HumanMessage(content=prompt)
-            ])
-            
+            response = await llm.ainvoke(
+                [
+                    SystemMessage(
+                        content="You are a research consolidation expert. Respond only with valid JSON."
+                    ),
+                    HumanMessage(content=prompt),
+                ]
+            )
+
             text = response.content.strip()
             # Basic cleanup of markdown fences if present
             if text.startswith("```"):
                 text = text.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-                
-            result = json_repair.loads(text)
-            
+
+            result = cast(dict[str, Any], json_repair.loads(text))
+
             summary = result.get("summary", "Session consolidated.")
             updated_memory = result.get("research_memory_update", current_memory)
-            
+
             if updated_memory and updated_memory != current_memory:
                 self.write_long_term(updated_memory)
                 logger.info("Research memory updated with consolidated findings")
-                
-            return summary
-            
+
+            return cast(str, summary)
+
         except Exception as e:
             logger.error(f"Memory consolidation failed: {e}")
             return f"Error during consolidation: {str(e)}"

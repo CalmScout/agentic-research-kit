@@ -4,10 +4,10 @@ Provides abstract base class and concrete implementations for loading
 different document types (PDF, DOCX, HTML, TXT) into a unified format.
 """
 
+import logging
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import List, Dict, Any, Optional
-import logging
+from typing import Any, cast
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ class DocumentLoader(ABC):
     """
 
     @abstractmethod
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load document and return structured content.
 
         Args:
@@ -71,14 +71,14 @@ class PDFLoader(DocumentLoader):
         self.extract_images = extract_images
         try:
             import fitz  # PyMuPDF
-            self.fitz = fitz
-        except ImportError:
-            raise ImportError(
-                "PyMuPDF (fitz) is required for PDF loading. "
-                "Install with: uv add pymupdf"
-            )
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+            self.fitz = fitz
+        except ImportError as e:
+            raise ImportError(
+                "PyMuPDF (fitz) is required for PDF loading. " "Install with: uv add pymupdf"
+            ) from e
+
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load PDF and extract text from each page.
 
         Args:
@@ -108,7 +108,7 @@ class PDFLoader(DocumentLoader):
                         "page": page_num + 1,
                         "total_pages": len(pdf),
                         "type": "pdf",
-                    }
+                    },
                 }
                 docs.append(doc)
 
@@ -116,7 +116,7 @@ class PDFLoader(DocumentLoader):
             logger.info(f"Loaded {len(docs)} pages from {path_obj.name}")
 
         except Exception as e:
-            raise ValueError(f"Failed to load PDF {path}: {e}")
+            raise ValueError(f"Failed to load PDF {path}: {e}") from e
 
         return docs
 
@@ -131,14 +131,14 @@ class DocxLoader(DocumentLoader):
         """Initialize DOCX loader."""
         try:
             from docx import Document
-            self.Document = Document
-        except ImportError:
-            raise ImportError(
-                "python-docx is required for DOCX loading. "
-                "Install with: uv add python-docx"
-            )
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+            self.Document = Document
+        except ImportError as e:
+            raise ImportError(
+                "python-docx is required for DOCX loading. " "Install with: uv add python-docx"
+            ) from e
+
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load DOCX and extract paragraphs.
 
         Args:
@@ -169,33 +169,37 @@ class DocxLoader(DocumentLoader):
                 # Create new chunk when size limit reached
                 if chunk_size >= max_chunk_size:
                     chunk_text = "\n\n".join(current_chunk)
-                    docs.append({
-                        "content": chunk_text,
-                        "metadata": {
-                            "source": str(path_obj),
-                            "filename": path_obj.name,
-                            "type": "docx",
+                    docs.append(
+                        {
+                            "content": chunk_text,
+                            "metadata": {
+                                "source": str(path_obj),
+                                "filename": path_obj.name,
+                                "type": "docx",
+                            },
                         }
-                    })
+                    )
                     current_chunk = []
                     chunk_size = 0
 
             # Add remaining paragraphs
             if current_chunk:
                 chunk_text = "\n\n".join(current_chunk)
-                docs.append({
-                    "content": chunk_text,
-                    "metadata": {
-                        "source": str(path_obj),
-                        "filename": path_obj.name,
-                        "type": "docx",
+                docs.append(
+                    {
+                        "content": chunk_text,
+                        "metadata": {
+                            "source": str(path_obj),
+                            "filename": path_obj.name,
+                            "type": "docx",
+                        },
                     }
-                })
+                )
 
             logger.info(f"Loaded {len(docs)} chunks from {path_obj.name}")
 
         except Exception as e:
-            raise ValueError(f"Failed to load DOCX {path}: {e}")
+            raise ValueError(f"Failed to load DOCX {path}: {e}") from e
 
         return docs
 
@@ -210,14 +214,15 @@ class HTMLLoader(DocumentLoader):
         """Initialize HTML loader."""
         try:
             from bs4 import BeautifulSoup
+
             self.BeautifulSoup = BeautifulSoup
-        except ImportError:
+        except ImportError as e:
             raise ImportError(
                 "beautifulsoup4 is required for HTML loading. "
                 "Install with: uv add beautifulsoup4 lxml"
-            )
+            ) from e
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load HTML and extract text content.
 
         Args:
@@ -230,36 +235,38 @@ class HTMLLoader(DocumentLoader):
         docs = []
 
         try:
-            with open(path_obj, 'r', encoding='utf-8') as f:
+            with open(path_obj, encoding="utf-8") as f:
                 html = f.read()
 
-            soup = self.BeautifulSoup(html, 'lxml')
+            soup = self.BeautifulSoup(html, "lxml")
 
             # Remove script and style elements
             for script in soup(["script", "style", "nav", "footer", "header"]):
                 script.decompose()
 
             # Extract text
-            text = soup.get_text(separator='\n', strip=True)
+            text = soup.get_text(separator="\n", strip=True)
 
             # Clean up whitespace
             lines = [line.strip() for line in text.splitlines() if line.strip()]
-            text = '\n'.join(lines)
+            text = "\n".join(lines)
 
-            docs.append({
-                "content": text,
-                "metadata": {
-                    "source": str(path_obj),
-                    "filename": path_obj.name,
-                    "title": soup.title.string if soup.title else path_obj.name,
-                    "type": "html",
+            docs.append(
+                {
+                    "content": text,
+                    "metadata": {
+                        "source": str(path_obj),
+                        "filename": path_obj.name,
+                        "title": soup.title.string if soup.title else path_obj.name,
+                        "type": "html",
+                    },
                 }
-            })
+            )
 
             logger.info(f"Loaded HTML from {path_obj.name}")
 
         except Exception as e:
-            raise ValueError(f"Failed to load HTML {path}: {e}")
+            raise ValueError(f"Failed to load HTML {path}: {e}") from e
 
         return docs
 
@@ -270,7 +277,7 @@ class TextLoader(DocumentLoader):
     Simple loader for .txt and other plain text formats.
     """
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load text file.
 
         Args:
@@ -285,25 +292,27 @@ class TextLoader(DocumentLoader):
         try:
             # Try UTF-8 first, fallback to latin-1
             try:
-                with open(path_obj, 'r', encoding='utf-8') as f:
+                with open(path_obj, encoding="utf-8") as f:
                     text = f.read()
             except UnicodeDecodeError:
-                with open(path_obj, 'r', encoding='latin-1') as f:
+                with open(path_obj, encoding="latin-1") as f:
                     text = f.read()
 
-            docs.append({
-                "content": text,
-                "metadata": {
-                    "source": str(path_obj),
-                    "filename": path_obj.name,
-                    "type": "text",
+            docs.append(
+                {
+                    "content": text,
+                    "metadata": {
+                        "source": str(path_obj),
+                        "filename": path_obj.name,
+                        "type": "text",
+                    },
                 }
-            })
+            )
 
             logger.info(f"Loaded text file {path_obj.name}")
 
         except Exception as e:
-            raise ValueError(f"Failed to load text file {path}: {e}")
+            raise ValueError(f"Failed to load text file {path}: {e}") from e
 
         return docs
 
@@ -314,7 +323,7 @@ class MarkdownLoader(DocumentLoader):
     Simple loader for .md files that preserves structure.
     """
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load Markdown file.
 
         Args:
@@ -327,31 +336,33 @@ class MarkdownLoader(DocumentLoader):
         docs = []
 
         try:
-            with open(path_obj, 'r', encoding='utf-8') as f:
+            with open(path_obj, encoding="utf-8") as f:
                 text = f.read()
 
-            docs.append({
-                "content": text,
-                "metadata": {
-                    "source": str(path_obj),
-                    "filename": path_obj.name,
-                    "type": "markdown",
+            docs.append(
+                {
+                    "content": text,
+                    "metadata": {
+                        "source": str(path_obj),
+                        "filename": path_obj.name,
+                        "type": "markdown",
+                    },
                 }
-            })
+            )
 
             logger.info(f"Loaded Markdown file {path_obj.name}")
 
         except Exception as e:
-            raise ValueError(f"Failed to load Markdown file {path}: {e}")
+            raise ValueError(f"Failed to load Markdown file {path}: {e}") from e
 
         return docs
 
 
 # Loader registry mapping file extensions to loader classes
-LOADER_REGISTRY: Dict[str, type] = {
+LOADER_REGISTRY: dict[str, type] = {
     ".pdf": PDFLoader,
     ".docx": DocxLoader,
-    ".doc": DocxLoader,  #python-docx only supports .docx, but we map it anyway
+    ".doc": DocxLoader,  # python-docx only supports .docx, but we map it anyway
     ".html": HTMLLoader,
     ".htm": HTMLLoader,
     ".txt": TextLoader,
@@ -376,16 +387,13 @@ def get_loader(file_path: str) -> DocumentLoader:
 
     if ext not in LOADER_REGISTRY:
         supported = ", ".join(LOADER_REGISTRY.keys())
-        raise ValueError(
-            f"Unsupported file type: {ext}. "
-            f"Supported types: {supported}"
-        )
+        raise ValueError(f"Unsupported file type: {ext}. " f"Supported types: {supported}")
 
     loader_class = LOADER_REGISTRY[ext]
-    return loader_class()
+    return cast(DocumentLoader, loader_class())
 
 
-def load_document(file_path: str) -> List[Dict[str, Any]]:
+def load_document(file_path: str) -> list[dict[str, Any]]:
     """Load a document using the appropriate loader.
 
     Convenience function that automatically selects the right loader

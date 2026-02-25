@@ -4,12 +4,12 @@ Provides reranking of retrieved documents using score-based or model-based reran
 """
 
 import json
-from typing import Any, List
-
-from src.agents.tools.base import Tool
-from src.agents.reranker import get_reranker
+from typing import Any
 
 from loguru import logger
+
+from src.agents.reranker import get_reranker
+from src.agents.tools.base import Tool
 
 
 class RerankerTool(Tool):
@@ -31,32 +31,31 @@ class RerankerTool(Tool):
                 "docs": {
                     "type": "array",
                     "description": "List of retrieved documents to rerank",
-                    "items": {"type": "object"}
+                    "items": {"type": "object"},
                 },
-                "query": {
-                    "type": "string",
-                    "description": "Original query for relevance scoring"
-                },
+                "query": {"type": "string", "description": "Original query for relevance scoring"},
                 "top_k": {
                     "type": "integer",
                     "description": "Number of top documents to return",
-                    "default": 10
-                }
+                    "default": 10,
+                },
             },
-            "required": ["docs", "query"]
+            "required": ["docs", "query"],
         }
 
-    async def execute(self, docs: List[dict], query: str, top_k: int = 10, **kwargs) -> str:
+    async def execute(self, **kwargs: Any) -> str:
         """Rerank documents by relevance to the query.
 
         Args:
-            docs: List of documents to rerank
-            query: Original query
-            top_k: Number of top documents to return
+            **kwargs: Must contain 'docs' and 'query', optional 'top_k'
 
         Returns:
             JSON string with reranked documents
         """
+        docs = kwargs.get("docs", [])
+        kwargs.get("query", "")
+        top_k = kwargs.get("top_k", 10)
+
         try:
             # Try to use the reranker if available
             reranker = get_reranker()
@@ -66,21 +65,13 @@ class RerankerTool(Tool):
                 logger.debug("Reranker not available, using score-based fallback")
 
                 # Sort by existing score
-                sorted_docs = sorted(
-                    docs,
-                    key=lambda x: x.get("score", 0.0),
-                    reverse=True
-                )
+                sorted_docs = sorted(docs, key=lambda x: x.get("score", 0.0), reverse=True)
                 reranked = sorted_docs[:top_k]
 
             else:
                 # Use Qwen3-VL reranker (when available)
                 # For now, use the same fallback as above
-                sorted_docs = sorted(
-                    docs,
-                    key=lambda x: x.get("score", 0.0),
-                    reverse=True
-                )
+                sorted_docs = sorted(docs, key=lambda x: x.get("score", 0.0), reverse=True)
                 reranked = sorted_docs[:top_k]
 
             # Extract scores
@@ -88,18 +79,22 @@ class RerankerTool(Tool):
 
             logger.info(f"Reranked {len(docs)} → {len(reranked)} documents")
 
-            return json.dumps({
-                "reranked_docs": reranked,
-                "reranked_scores": reranked_scores,
-                "num_docs": len(reranked)
-            })
+            return json.dumps(
+                {
+                    "reranked_docs": reranked,
+                    "reranked_scores": reranked_scores,
+                    "num_docs": len(reranked),
+                }
+            )
 
         except Exception as e:
             logger.error(f"Reranking failed: {e}")
             # Fallback: return original docs
-            return json.dumps({
-                "reranked_docs": docs[:top_k],
-                "reranked_scores": [d.get("score", 0.0) for d in docs[:top_k]],
-                "num_docs": min(len(docs), top_k),
-                "error": str(e)
-            })
+            return json.dumps(
+                {
+                    "reranked_docs": docs[:top_k],
+                    "reranked_scores": [d.get("score", 0.0) for d in docs[:top_k]],
+                    "num_docs": min(len(docs), top_k),
+                    "error": str(e),
+                }
+            )

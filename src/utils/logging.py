@@ -12,14 +12,15 @@ Usage:
 
 import sys
 from pathlib import Path
+
 from loguru import logger
 
 
 def setup_logging(
     console_level: str = "INFO",
-    log_dir: Path = None,
+    log_dir: Path | None = None,
     rotation: str = "10 MB",
-    retention: str = "30 days"
+    retention: str = "30 days",
 ) -> None:
     """Configure Loguru for application logging.
 
@@ -51,7 +52,7 @@ def setup_logging(
             "<level>{message}</level>"
         ),
         level=console_level,
-        colorize=True
+        colorize=True,
     )
 
     # -----------------------------------------------------------------
@@ -63,7 +64,7 @@ def setup_logging(
         level="DEBUG",
         rotation=rotation,
         retention=retention,
-        compression="zip"
+        compression="zip",
     )
 
     # -----------------------------------------------------------------
@@ -75,15 +76,11 @@ def setup_logging(
         level="ERROR",
         rotation=rotation,
         retention=retention,
-        compression="zip"
+        compression="zip",
     )
 
     # Log startup
-    logger.info(
-        "logging_initialized",
-        log_dir=str(log_dir),
-        console_level=console_level
-    )
+    logger.info("logging_initialized", log_dir=str(log_dir), console_level=console_level)
 
 
 def get_logger():

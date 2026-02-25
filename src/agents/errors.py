@@ -21,7 +21,7 @@ class AgentError(Exception):
         context: Additional context dictionary
     """
 
-    def __init__(self, message: str, agent: str = "unknown", context: dict = None):
+    def __init__(self, message: str, agent: str = "unknown", context: dict | None = None):
         self.message = message
         self.agent = agent
         self.context = context or {}
@@ -37,7 +37,7 @@ class AgentError(Exception):
             "error_type": self.__class__.__name__,
             "message": self.message,
             "agent": self.agent,
-            "context": self.context
+            "context": self.context,
         }
 
 
@@ -47,7 +47,7 @@ class RetrievalError(AgentError):
     Raised when document retrieval fails (vector search, BM25, etc.).
     """
 
-    def __init__(self, message: str, context: dict = None):
+    def __init__(self, message: str, context: dict | None = None):
         super().__init__(message, agent="enhanced_retriever", context=context)
 
 
@@ -57,7 +57,7 @@ class RerankingError(AgentError):
     Raised when document reranking fails.
     """
 
-    def __init__(self, message: str, context: dict = None):
+    def __init__(self, message: str, context: dict | None = None):
         super().__init__(message, agent="reranker", context=context)
 
 
@@ -67,7 +67,7 @@ class GenerationError(AgentError):
     Raised when LLM response generation fails.
     """
 
-    def __init__(self, message: str, context: dict = None):
+    def __init__(self, message: str, context: dict | None = None):
         super().__init__(message, agent="enhanced_response_generator", context=context)
 
 
@@ -77,7 +77,7 @@ class ToolExecutionError(AgentError):
     Raised when a tool in the tool registry fails to execute.
     """
 
-    def __init__(self, tool_name: str, message: str, context: dict = None):
+    def __init__(self, tool_name: str, message: str, context: dict | None = None):
         context = context or {}
         context["tool_name"] = tool_name
         super().__init__(message, agent=f"tool:{tool_name}", context=context)
@@ -89,7 +89,7 @@ class EmbeddingError(AgentError):
     Raised when query or document embedding fails.
     """
 
-    def __init__(self, message: str, context: dict = None):
+    def __init__(self, message: str, context: dict | None = None):
         super().__init__(message, agent="embedder", context=context)
 
 
@@ -99,5 +99,5 @@ class ConfigurationError(AgentError):
     Raised when system configuration is invalid or missing.
     """
 
-    def __init__(self, message: str, context: dict = None):
+    def __init__(self, message: str, context: dict | None = None):
         super().__init__(message, agent="configuration", context=context)

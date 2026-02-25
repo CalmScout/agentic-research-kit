@@ -5,10 +5,11 @@ This avoids async context manager conflicts when using LightRAG with LangGraph.
 """
 
 import asyncio
-import json
 import logging
+import os
 import subprocess
-from typing import Dict, Any, List, Optional
+from typing import Any
+
 import httpx
 
 from src.utils.config import Settings
@@ -22,7 +23,7 @@ class LightRAGHTTPClient:
     Manages LightRAG server lifecycle and provides query methods.
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Settings | None = None):
         """Initialize LightRAG HTTP client.
 
         Args:
@@ -32,8 +33,8 @@ class LightRAGHTTPClient:
         self.host = self.settings.lightrag_api_host
         self.port = self.settings.lightrag_api_port
         self.base_url = f"http://{self.host}:{self.port}"
-        self._server_process: Optional[subprocess.Popen] = None
-        self._client: Optional[httpx.AsyncClient] = None
+        self._server_process: subprocess.Popen | None = None
+        self._client: httpx.AsyncClient | None = None
 
         # Query timeout (seconds)
         self.query_timeout = 120  # 2 minutes for complex queries
@@ -83,11 +84,16 @@ class LightRAGHTTPClient:
             "python",
             "-m",
             "lightrag.api.lightrag_server",
-            "--host", self.host,
-            "--port", str(self.port),
-            "--llm-binding", "openai",
-            "--embedding-binding", "openai",
-            "--log-level", "INFO",
+            "--host",
+            self.host,
+            "--port",
+            str(self.port),
+            "--llm-binding",
+            "openai",
+            "--embedding-binding",
+            "openai",
+            "--log-level",
+            "INFO",
         ]
 
         # Set environment variables
@@ -106,7 +112,7 @@ class LightRAGHTTPClient:
             # Start server as subprocess
             self._server_process = subprocess.Popen(
                 cmd,
-                env={**subprocess.os.environ, **env},
+                env={**os.environ, **env},
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -168,9 +174,7 @@ class LightRAGHTTPClient:
                     "Please start it manually or enable LIGHTRAG_AUTO_START_SERVER."
                 )
 
-    async def query_hybrid(
-        self, query: str, top_k: int = 50
-    ) -> Dict[str, Any]:
+    async def query_hybrid(self, query: str, top_k: int = 50) -> dict[str, Any]:
         """Query LightRAG using hybrid mode.
 
         Hybrid mode combines:
@@ -238,11 +242,15 @@ class LightRAGHTTPClient:
                             documents.append(doc)
                             scores.append(doc["score"])
 
-            logger.info(f"✓ Retrieved {len(documents)} documents from LightRAG API (endpoint: /query/data)")
+            logger.info(
+                f"✓ Retrieved {len(documents)} documents from LightRAG API (endpoint: /query/data)"
+            )
 
             # If no documents retrieved, raise error to trigger fallback
             if len(documents) == 0:
-                raise RuntimeError("LightRAG API returned no documents (possibly due to empty index or query mismatch)")
+                raise RuntimeError(
+                    "LightRAG API returned no documents (possibly due to empty index or query mismatch)"
+                )
 
             return {
                 "retrieved_docs": documents,
@@ -252,10 +260,10 @@ class LightRAGHTTPClient:
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP error during query: {e}")
-            raise RuntimeError(f"LightRAG API query failed: {e}")
+            raise RuntimeError(f"LightRAG API query failed: {e}") from e
         except Exception as e:
             logger.error(f"Query failed: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to query LightRAG API: {e}")
+            raise RuntimeError(f"Failed to query LightRAG API: {e}") from e
 
     async def close(self) -> None:
         """Close resources and cleanup.
@@ -273,7 +281,7 @@ class LightRAGHTTPClient:
 
 
 # Singleton instance for efficiency
-_client: Optional[LightRAGHTTPClient] = None
+_client: LightRAGHTTPClient | None = None
 
 
 def get_lightrag_client() -> LightRAGHTTPClient:

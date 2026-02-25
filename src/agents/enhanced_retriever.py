@@ -11,25 +11,23 @@ Agent 1 in the simplified 2-agent workflow.
 """
 
 import json
-from typing import Dict, Any, List
 from contextlib import AsyncExitStack
-
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from src.agents.base_state import BaseAgentState
-from src.agents.embeddings import embedder
-from src.agents.tools.registry import ToolRegistry
-from src.agents.tools.rag_tools.entity_extractor import EntityExtractorTool
-from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool
-from src.agents.tools.rag_tools.deep_dive import EntityDeepDiveTool
-from src.agents.tools.mcp import connect_mcp_servers, MCPServerConfig
-from src.agents.tools.web import WebSearchTool, WebFetchTool
-from src.utils.config import get_settings
+from typing import Any
 
 from loguru import logger
 
+from src.agents.base_state import BaseAgentState
+from src.agents.embeddings import embedder
+from src.agents.tools.mcp import MCPServerConfig, connect_mcp_servers
+from src.agents.tools.rag_tools.deep_dive import EntityDeepDiveTool
+from src.agents.tools.rag_tools.entity_extractor import EntityExtractorTool
+from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool
+from src.agents.tools.registry import ToolRegistry
+from src.agents.tools.web import WebFetchTool, WebSearchTool
+from src.utils.config import get_settings
 
-async def enhanced_retriever_agent(state: BaseAgentState) -> Dict[str, Any]:
+
+async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
     """Enhanced Retriever Agent (Query Analyzer + Retriever).
 
     Combines query analysis and retrieval in a single agent using tool registry.
@@ -60,7 +58,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> Dict[str, Any]:
             # Initialize tool registry
             # -------------------------------------------------------------
             registry = ToolRegistry()
-            stack.push_async_callback(registry.close) # Ensure registry is closed
+            stack.push_async_callback(registry.close)  # Ensure registry is closed
             registry.register(EntityExtractorTool())
             registry.register(HybridRetrieverTool())
             registry.register(WebSearchTool(api_key=settings.brave_api_key))
@@ -108,18 +106,19 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> Dict[str, Any]:
             # -------------------------------------------------------------
             # Step 4: Retrieve documents from Local RAG
             # -------------------------------------------------------------
-            retrieval_result = await registry.execute("hybrid_retriever", {
-                "query": query,
-                "top_k": settings.retrieval_top_k,
-                "mode": retrieval_mode
-            })
+            retrieval_result = await registry.execute(
+                "hybrid_retriever",
+                {"query": query, "top_k": settings.retrieval_top_k, "mode": retrieval_mode},
+            )
 
             retrieval_data = json.loads(retrieval_result)
             retrieved_docs = retrieval_data.get("retrieved_docs", [])
             retrieval_scores = retrieval_data.get("retrieval_scores", [])
             retrieval_method = retrieval_data.get("retrieval_method", "keyword")
 
-            logger.info(f"Retrieved {len(retrieved_docs)} documents from local RAG using {retrieval_method} (mode={retrieval_mode})")
+            logger.info(
+                f"Retrieved {len(retrieved_docs)} documents from local RAG using {retrieval_method} (mode={retrieval_mode})"
+            )
 
             # -------------------------------------------------------------
             # Step 5: Web Search Fallback/Augmentation
@@ -128,42 +127,53 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> Dict[str, Any]:
             if len(retrieved_docs) < 5 and settings.brave_api_key:
                 logger.info("Insufficient local results, triggering web search...")
                 search_result = await registry.execute("web_search", {"query": query, "count": 5})
-                
+
                 # Simple parsing of search results into document format
                 if not search_result.startswith("Error"):
                     web_docs = []
                     # Basic parser for the string output of WebSearchTool
                     lines = search_result.split("\n")
-                    current_doc = None
+                    current_doc: dict[str, Any] | None = None
                     for line in lines:
                         if line and line[0].isdigit() and ". " in line:
-                            if current_doc: web_docs.append(current_doc)
-                            current_doc = {"text": line.split(". ", 1)[1], "source": "web_search", "score": 0.7}
+                            if current_doc:
+                                web_docs.append(current_doc)
+                            current_doc = {
+                                "text": line.split(". ", 1)[1],
+                                "source": "web_search",
+                                "score": 0.7,
+                            }
                         elif line.strip().startswith("http"):
-                            if current_doc: current_doc["url"] = line.strip()
+                            if current_doc:
+                                current_doc["url"] = line.strip()
                         elif line.strip() and current_doc:
                             current_doc["text"] += " " + line.strip()
-                    
-                    if current_doc: web_docs.append(current_doc)
-                    
+
+                    if current_doc:
+                        web_docs.append(current_doc)
+
                     # Add web docs to retrieved_docs
                     for doc in web_docs:
-                        retrieved_docs.append({
-                            "content": doc["text"],
-                            "metadata": {"source": doc.get("url", "web"), "type": "web_search"},
-                            "score": doc["score"]
-                        })
+                        retrieved_docs.append(
+                            {
+                                "content": doc["text"],
+                                "metadata": {"source": doc.get("url", "web"), "type": "web_search"},
+                                "score": doc["score"],
+                            }
+                        )
                         retrieval_scores.append(doc["score"])
-                    
+
                     logger.info(f"Added {len(web_docs)} documents from web search")
-                    retrieval_method += "+web"
+                    retrieval_method = str(retrieval_method) + "+web"
 
             # -------------------------------------------------------------
             # Step 6: Proactive Background Research
             # -------------------------------------------------------------
             # Trigger deep-dives for entities that seem highly relevant but have low coverage
-            if entities and settings.llm_mode == "api": # Only do this in API mode to avoid overloading local model
-                for entity in entities[:2]: # Max 2 deep dives per query
+            if (
+                entities and settings.llm_mode == "api"
+            ):  # Only do this in API mode to avoid overloading local model
+                for entity in entities[:2]:  # Max 2 deep dives per query
                     logger.info(f"Triggering proactive deep-dive for: {entity}")
                     await registry.execute("entity_deep_dive", {"entity": entity})
 
@@ -179,7 +189,9 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> Dict[str, Any]:
                 "retrieval_method": retrieval_method,
             }
 
-            logger.info(f"✓ Enhanced Retriever complete: type={query_type}, entities={len(entities)}, docs={len(retrieved_docs)}")
+            logger.info(
+                f"✓ Enhanced Retriever complete: type={query_type}, entities={len(entities)}, docs={len(retrieved_docs)}"
+            )
 
             return result
 

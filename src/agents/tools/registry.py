@@ -5,6 +5,7 @@ Copied from nanobot framework with modifications for ARK's use case.
 
 import json
 from typing import Any
+
 from loguru import logger
 
 from src.agents.tools.base import Tool
@@ -62,25 +63,25 @@ class ToolRegistry:
         try:
             from opentelemetry import trace
             from opentelemetry.trace import SpanKind
-            
+
             tracer = trace.get_tracer(__name__)
             with tracer.start_as_current_span(
                 f"tool:{name}",
                 kind=SpanKind.CLIENT,
-                attributes={
-                    "tool.name": name,
-                    "tool.params": json.dumps(params)
-                }
+                attributes={"tool.name": name, "tool.params": json.dumps(params)},
             ) as span:
                 errors = tool.validate_params(params)
                 if errors:
                     error_msg = f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)
                     span.set_attribute("tool.error", error_msg)
                     return error_msg
-                
+
                 result = await tool.execute(**params)
                 # Cap result length in trace to avoid overhead
-                span.set_attribute("tool.result", str(result)[:500] + "..." if len(str(result)) > 500 else str(result))
+                span.set_attribute(
+                    "tool.result",
+                    str(result)[:500] + "..." if len(str(result)) > 500 else str(result),
+                )
                 return result
         except ImportError:
             # Fallback if opentelemetry is not installed

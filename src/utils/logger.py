@@ -1,10 +1,11 @@
 """Structured logging configuration."""
 
-import structlog
 import logging
 import sys
 from pathlib import Path
 from typing import Any
+
+import structlog
 
 from .config import get_settings
 

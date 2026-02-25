@@ -22,15 +22,15 @@ Example:
     >>> print(f"Faithfulness: {results['metrics']['faithfulness']['score']:.2%}")
 """
 
-import logging
-from typing import Dict, Any, List, Callable, Optional
-import pandas as pd
-from pathlib import Path
-from concurrent.futures import ThreadPoolExecutor
 import asyncio
+import logging
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any, cast
 
-from langchain_openai import ChatOpenAI
+import pandas as pd
 from langchain_core.language_models import BaseLanguageModel
+from langchain_openai import ChatOpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -82,8 +82,8 @@ class RAGASEvaluator:
             ImportError: If RAGAS is not installed
         """
         # Import RAGAS components
-        from ragas.llms import LangchainLLMWrapper
         from ragas.cache import DiskCacheBackend
+        from ragas.llms import LangchainLLMWrapper
 
         self.llm = LangchainLLMWrapper(evaluator_llm)
         self.batch_size = batch_size
@@ -91,23 +91,21 @@ class RAGASEvaluator:
 
         # Enable caching (75% cost reduction!)
         if enable_cache:
-            self.cache = DiskCacheBackend(cache_dir=".ragas_cache")
+            self.cache: Any = DiskCacheBackend(cache_dir=".ragas_cache")
             logger.info("RAGAS caching enabled at .ragas_cache/")
         else:
             self.cache = None
             logger.info("RAGAS caching disabled")
 
-        logger.info(
-            f"RAGASEvaluator initialized (batch_size={batch_size}, timeout={timeout}s)"
-        )
+        logger.info(f"RAGASEvaluator initialized (batch_size={batch_size}, timeout={timeout}s)")
 
     async def evaluate_workflow(
         self,
         query_func: Callable,
         csv_path: str = "data/claim_matching_dataset.csv",
         test_size: int = 50,
-        metrics: List[str] = ["faithfulness", "answer_relevancy"],
-    ) -> Dict[str, Any]:
+        metrics: list[str] | None = None,
+    ) -> dict[str, Any]:
         """Run RAGAS evaluation on the LangGraph workflow.
 
         This method:
@@ -145,6 +143,8 @@ class RAGASEvaluator:
             >>> faithfulness = results['metrics']['faithfulness']['score']
             >>> print(f"Faithfulness: {faithfulness:.2%}")
         """
+        if metrics is None:
+            metrics = ["faithfulness", "answer_relevancy"]
         logger.info(f"Starting RAGAS evaluation with {test_size} queries...")
         logger.info(f"Metrics: {', '.join(metrics)}")
 
@@ -231,8 +231,7 @@ class RAGASEvaluator:
                     "question": question,
                     "ground_truth": reference,
                     "contexts": [
-                        s.get("text", s.get("content", ""))
-                        for s in result.get("sources", [])
+                        s.get("text", s.get("content", "")) for s in result.get("sources", [])
                     ],
                     "answer": result.get("response", ""),
                     "phoenix_trace_id": result.get("phoenix_trace_id"),
@@ -247,21 +246,23 @@ class RAGASEvaluator:
             except Exception as e:
                 logger.error(f"Error collecting data for '{question[:50]}...': {e}")
                 # Add placeholder for failed queries
-                results.append({
-                    "question": question,
-                    "ground_truth": reference,
-                    "contexts": [],
-                    "answer": f"ERROR: {str(e)}",
-                    "phoenix_trace_id": None,
-                })
+                results.append(
+                    {
+                        "question": question,
+                        "ground_truth": reference,
+                        "contexts": [],
+                        "answer": f"ERROR: {str(e)}",
+                        "phoenix_trace_id": None,
+                    }
+                )
 
         return pd.DataFrame(results)
 
     async def _run_ragas_evaluation(
         self,
         evaluation_df: pd.DataFrame,
-        metrics: List[str],
-    ) -> Dict[str, Any]:
+        metrics: list[str],
+    ) -> dict[str, Any]:
         """Execute RAGAS metrics on the collected data.
 
         This method:
@@ -281,22 +282,19 @@ class RAGASEvaluator:
                 - trace_ids: Phoenix trace IDs
         """
         try:
-            from ragas.dataset_schema import SingleTurnSample, MultiTurnSample
-            from ragas import EvaluationDataset, evaluate
+            from ragas import EvaluationDataset, RunConfig, evaluate
             from ragas.metrics import (
-                Faithfulness,
                 AnswerRelevancy,
                 ContextPrecision,
                 ContextRecall,
+                Faithfulness,
             )
-            from ragas import RunConfig
         except ImportError as e:
-            raise ImportError(
-                "RAGAS is not installed. Install with: uv add ragas"
-            ) from e
+            raise ImportError("RAGAS is not installed. Install with: uv add ragas") from e
 
         # Map metric names to RAGAS metrics
         from langchain_huggingface import HuggingFaceEmbeddings
+
         embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
 
         metric_map = {
@@ -316,9 +314,7 @@ class RAGASEvaluator:
                 logger.warning(f"Unknown metric: {m} (skipping)")
 
         if not selected_metrics:
-            raise ValueError(
-                f"No valid metrics specified. Choose from: {list(metric_map.keys())}"
-            )
+            raise ValueError(f"No valid metrics specified. Choose from: {list(metric_map.keys())}")
 
         # Create RAGAS dataset
         samples = []
@@ -338,33 +334,34 @@ class RAGASEvaluator:
         run_config = RunConfig(timeout=self.timeout)
 
         # Run evaluation (RAGAS is synchronous, run in thread pool)
-        logger.info(f"Running RAGAS evaluation (may take several minutes)...")
+        logger.info("Running RAGAS evaluation (may take several minutes)...")
         loop = asyncio.get_event_loop()
 
         with ThreadPoolExecutor() as executor:
-            result = await loop.run_in_executor(
-                executor,
-                evaluate,
-                dataset,
-                selected_metrics,
-                None,  # llm (already wrapped in metrics)
-                None,  # embeddings
-                None,  # experiment_name
-                None,  # callbacks
-                run_config,
-                None,  # token_usage_parser
-                False,  # raise_exceptions
-                None,  # column_map
-                True,  # show_progress
-                None,  # batch_size
-                None,  # _run_id
-                None,  # _pbar
-                False,  # return_executor
-                True,  # allow_nest_asyncio
-            )
+            from ragas import EvaluationResult
+        result = await loop.run_in_executor(
+            executor,
+            evaluate,
+            dataset,
+            selected_metrics,
+            None,  # llm (already wrapped in metrics)
+            None,  # embeddings
+            None,  # experiment_name
+            None,  # callbacks
+            run_config,
+            None,  # token_usage_parser
+            False,  # raise_exceptions
+            None,  # column_map
+            True,  # show_progress
+            None,  # batch_size
+            None,  # _run_id
+            None,  # _pbar
+            False,  # return_executor
+            True,  # allow_nest_asyncio
+        )
 
         # Convert to dict
-        results_df = result.to_pandas()
+        results_df = cast(EvaluationResult, result).to_pandas()
 
         # Calculate summary metrics
         summary = {}
@@ -422,6 +419,7 @@ def create_evaluator_from_settings(
         >>> results = await evaluator.evaluate_workflow(...)
     """
     import os
+
     from dotenv import load_dotenv
 
     # Load environment variables from .env
@@ -430,14 +428,14 @@ def create_evaluator_from_settings(
     if llm_provider == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
-            raise EnvironmentError(
+            raise OSError(
                 "DEEPSEEK_API_KEY not found in environment. "
                 "Set it in .env or export DEEPSEEK_API_KEY=..."
             )
 
         evaluator_llm = ChatOpenAI(
             model="deepseek-chat",
-            api_key=api_key,
+            api_key=cast(Any, api_key),
             base_url="https://api.deepseek.com",
             temperature=0.0,  # Critical for evaluation!
         )
@@ -447,14 +445,14 @@ def create_evaluator_from_settings(
     elif llm_provider == "openai":
         api_key = os.getenv("RAGAS_OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise EnvironmentError(
+            raise OSError(
                 "OPENAI_API_KEY not found in environment. "
                 "Set it in .env or export OPENAI_API_KEY=..."
             )
 
         evaluator_llm = ChatOpenAI(
             model="gpt-4o-mini",
-            api_key=api_key,
+            api_key=cast(Any, api_key),
             temperature=0.0,  # Critical for evaluation!
         )
 
@@ -464,18 +462,17 @@ def create_evaluator_from_settings(
         # Import model selector
         try:
             from src.agents.model_selector import get_model_selector
+
             selector = get_model_selector()
-            evaluator_llm = selector.get_local_llm()
+            evaluator_llm = cast(ChatOpenAI, selector.get_local_llm())
             logger.info("Using local Qwen3-8B for RAGAS evaluation")
         except Exception as e:
             raise ImportError(
-                f"Failed to load local model: {e}. "
-                "Ensure Ollama is running with Qwen3-8B"
+                f"Failed to load local model: {e}. " "Ensure Ollama is running with Qwen3-8B"
             ) from e
     else:
         raise ValueError(
-            f"Unknown llm_provider: {llm_provider}. "
-            f"Choose from: deepseek, openai, local"
+            f"Unknown llm_provider: {llm_provider}. " f"Choose from: deepseek, openai, local"
         )
 
     return RAGASEvaluator(evaluator_llm=evaluator_llm)

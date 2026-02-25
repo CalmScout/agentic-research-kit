@@ -4,7 +4,7 @@ Copied from nanobot framework with modifications for ARK's use case.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any
+from typing import Any, cast
 
 
 class Tool(ABC):
@@ -64,8 +64,10 @@ class Tool(ABC):
 
     def _validate(self, val: Any, schema: dict[str, Any], path: str) -> list[str]:
         t, label = schema.get("type"), path or "parameter"
-        if t in self._TYPE_MAP and not isinstance(val, self._TYPE_MAP[t]):
-            return [f"{label} should be {t}"]
+        if isinstance(t, str) and t in self._TYPE_MAP:
+            expected_type = cast(type, self._TYPE_MAP[t])
+            if not isinstance(val, expected_type):
+                return [f"{label} should be {t}"]
 
         errors = []
         if "enum" in schema and val not in schema["enum"]:
@@ -87,10 +89,12 @@ class Tool(ABC):
                     errors.append(f"missing required {path + '.' + k if path else k}")
             for k, v in val.items():
                 if k in props:
-                    errors.extend(self._validate(v, props[k], path + '.' + k if path else k))
+                    errors.extend(self._validate(v, props[k], path + "." + k if path else k))
         if t == "array" and "items" in schema:
             for i, item in enumerate(val):
-                errors.extend(self._validate(item, schema["items"], f"{path}[{i}]" if path else f"[{i}]"))
+                errors.extend(
+                    self._validate(item, schema["items"], f"{path}[{i}]" if path else f"[{i}]")
+                )
         return errors
 
     def to_schema(self) -> dict[str, Any]:
@@ -101,9 +105,14 @@ class Tool(ABC):
                 "name": self.name,
                 "description": self.description,
                 "parameters": self.parameters,
-            }
+            },
         }
 
     async def close(self) -> None:
-        """Close tool and clean up resources. Default is no-op."""
-        pass
+        """Close tool and clean up resources. Default is no-op.
+
+        Subclasses should override this if they need to release resources
+        like network connections or file handles.
+        """
+        # No-op by default, override in subclasses if needed
+        return None

@@ -64,6 +64,22 @@ ARK implements a sequential 3-agent loop designed to minimize hallucination and 
 | **Observability** | [Arize Phoenix](https://phoenix.arize.com/) | Distributed OTLP tracing and span analysis |
 | **Evaluation** | [RAGAS](https://github.com/explodinggradients/ragas) | Faithfulness, Relevancy, and Context metrics |
 
+## 🧪 Development & CI/CD
+
+Before pushing changes, you can run the full CI/CD check suite locally:
+
+```bash
+# Run all checks (Lint, Format, Type, Test)
+make lint format-check type-check test
+
+# Or individually:
+make lint          # Ruff linter
+make format-check  # Black formatting check
+make format        # Apply Black formatting
+make type-check    # Mypy type checking
+make test          # Pytest suite
+```
+
 ## 🚀 Getting Started
 
 ### Prerequisites

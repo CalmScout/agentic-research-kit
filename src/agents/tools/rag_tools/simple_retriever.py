@@ -6,10 +6,10 @@ Provides basic retrieval from RAG storage using keyword matching.
 import json
 from typing import Any
 
-from src.agents.tools.base import Tool
-from src.agents.simple_retriever import simple_retriever
-
 from loguru import logger
+
+from src.agents.simple_retriever import simple_retriever
+from src.agents.tools.base import Tool
 
 
 class SimpleRetrieverTool(Tool):
@@ -28,46 +28,51 @@ class SimpleRetrieverTool(Tool):
         return {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query"
-                },
+                "query": {"type": "string", "description": "Search query"},
                 "top_k": {
                     "type": "integer",
                     "description": "Number of documents to retrieve",
-                    "default": 10
-                }
+                    "default": 10,
+                },
             },
-            "required": ["query"]
+            "required": ["query"],
         }
 
-    async def execute(self, query: str, top_k: int = 10, **kwargs) -> str:
+    async def execute(self, **kwargs: Any) -> str:
         """Retrieve documents for the given query.
 
         Args:
-            query: Search query
-            top_k: Number of documents to retrieve
+            **kwargs: Must contain 'query', optional 'top_k'
 
         Returns:
             JSON string with retrieved documents and metadata
         """
+        query = kwargs.get("query", "")
+        if not query:
+            return json.dumps({"error": "Missing required parameter 'query'"}, ensure_ascii=False)
+        top_k = kwargs.get("top_k", 10)
+
         try:
             result = await simple_retriever(query, top_k=top_k)
 
             # Return the full result as JSON
-            return json.dumps({
-                "retrieved_docs": result.get("retrieved_docs", []),
-                "retrieval_scores": result.get("retrieval_scores", []),
-                "retrieval_method": result.get("retrieval_method", "keyword"),
-                "num_docs": len(result.get("retrieved_docs", []))
-            })
+            return json.dumps(
+                {
+                    "retrieved_docs": result.get("retrieved_docs", []),
+                    "retrieval_scores": result.get("retrieval_scores", []),
+                    "retrieval_method": result.get("retrieval_method", "keyword"),
+                    "num_docs": len(result.get("retrieved_docs", [])),
+                }
+            )
 
         except Exception as e:
             logger.error(f"Retrieval failed: {e}")
-            return json.dumps({
-                "retrieved_docs": [],
-                "retrieval_scores": [],
-                "retrieval_method": "keyword",
-                "num_docs": 0,
-                "error": str(e)
-            })
+            return json.dumps(
+                {
+                    "retrieved_docs": [],
+                    "retrieval_scores": [],
+                    "retrieval_method": "keyword",
+                    "num_docs": 0,
+                    "error": str(e),
+                }
+            )

@@ -6,12 +6,13 @@ through thread-based isolation, avoiding async context conflicts with LangGraph.
 
 import json
 import logging
-from typing import Any, Dict
+from typing import Any
+
+from src.agents.direct_lightrag_retriever import DirectLightRAGRetriever
+from src.agents.isolated_lightrag import IsolatedLightRAG
+from src.agents.simple_retriever import simple_retriever
 
 from ..base import Tool
-from src.agents.isolated_lightrag import IsolatedLightRAG
-from src.agents.direct_lightrag_retriever import DirectLightRAGRetriever
-from src.agents.simple_retriever import simple_retriever
 
 logger = logging.getLogger(__name__)
 
@@ -60,23 +61,20 @@ class HybridRetrieverTool(Tool):
         return {
             "type": "object",
             "properties": {
-                "query": {
-                    "type": "string",
-                    "description": "Search query text"
-                },
+                "query": {"type": "string", "description": "Search query text"},
                 "top_k": {
                     "type": "integer",
                     "description": "Number of documents to retrieve",
-                    "default": 50
+                    "default": 50,
                 },
                 "mode": {
                     "type": "string",
                     "description": "Retrieval mode (naive, local, global, hybrid)",
                     "enum": ["naive", "local", "global", "hybrid"],
-                    "default": "hybrid"
-                }
+                    "default": "hybrid",
+                },
             },
-            "required": ["query"]
+            "required": ["query"],
         }
 
     def _initialize_isolated_rag(self) -> None:
@@ -93,7 +91,7 @@ class HybridRetrieverTool(Tool):
 
             # Create direct LightRAG retriever (helper for model configuration)
             self.direct_retriever = DirectLightRAGRetriever()
-            
+
             # Use a factory function to initialize LightRAG within the worker thread.
             # This ensures that all async workers and event loops are bound to the
             # same thread and event loop, avoiding cross-thread async conflicts.
@@ -104,7 +102,7 @@ class HybridRetrieverTool(Tool):
             self.isolated_rag = IsolatedLightRAG(
                 rag_factory,
                 max_workers=1,  # Single worker for event loop consistency
-                timeout=60.0  # Increased timeout for complex queries
+                timeout=60.0,  # Increased timeout for complex queries
             )
 
             self._initialized = True
@@ -115,24 +113,21 @@ class HybridRetrieverTool(Tool):
             # Don't set _initialized, allowing retry on next call
             raise
 
-    async def execute(self, query: str, top_k: int = 50, mode: str = "hybrid", **kwargs) -> str:
+    async def execute(self, **kwargs: Any) -> str:
         """Execute hybrid retrieval with automatic fallback.
 
         Args:
-            query: Search query text
-            top_k: Number of documents to retrieve
-            mode: Retrieval mode (naive, local, global, hybrid)
-            **kwargs: Additional parameters (ignored)
+            **kwargs: Must contain 'query', optional 'top_k', 'mode'
 
         Returns:
-            JSON string with keys:
-                - retrieved_docs: List of document dicts
-                - retrieval_scores: List of relevance scores
-                - retrieval_method: "hybrid" or "keyword" (fallback)
-
-        Raises:
-            Propagates exceptions only if both hybrid and keyword retrieval fail
+            JSON string with retrieved documents and metadata
         """
+        query = kwargs.get("query", "")
+        if not query:
+            return json.dumps({"error": "Missing required parameter 'query'"}, ensure_ascii=False)
+        top_k = kwargs.get("top_k", 50)
+        mode = kwargs.get("mode", "hybrid")
+
         try:
             # Lazy initialization on first use
             if not self._initialized:
@@ -144,9 +139,7 @@ class HybridRetrieverTool(Tool):
             # Call aquery_sync which runs in isolated thread
             # and uses aquery_data for structured results when only_need_context=True
             result = self.isolated_rag.aquery_sync(
-                query,
-                mode=mode,  # naive, local, global, hybrid
-                only_need_context=True
+                query, mode=mode, only_need_context=True  # naive, local, global, hybrid
             )
 
             # Parse LightRAG response from aquery_data
@@ -162,7 +155,9 @@ class HybridRetrieverTool(Tool):
                 context_text = result.get("context", "")
                 if isinstance(context_text, str) and context_text:
                     # Parse context_text split by double newlines
-                    chunks = [{"content": c.strip()} for c in context_text.split("\n\n") if c.strip()]
+                    chunks = [
+                        {"content": c.strip()} for c in context_text.split("\n\n") if c.strip()
+                    ]
 
             if not chunks:
                 raise RuntimeError("LightRAG returned no retrieved chunks")
@@ -179,17 +174,19 @@ class HybridRetrieverTool(Tool):
                     if score < 0.1:
                         score = 0.1
 
-                    documents.append({
-                        "text": content,
-                        "score": score,
-                        "metadata": {
-                            "source": "lightrag_hybrid",
-                            "mode": "hybrid",
-                            "chunk_index": i,
-                            "file_path": chunk.get("file_path", ""),
-                            "chunk_id": chunk.get("chunk_id", "")
+                    documents.append(
+                        {
+                            "text": content,
+                            "score": score,
+                            "metadata": {
+                                "source": "lightrag_hybrid",
+                                "mode": "hybrid",
+                                "chunk_index": i,
+                                "file_path": chunk.get("file_path", ""),
+                                "chunk_id": chunk.get("chunk_id", ""),
+                            },
                         }
-                    })
+                    )
                     scores.append(score)
 
             # Limit to top_k documents
@@ -198,17 +195,17 @@ class HybridRetrieverTool(Tool):
 
             logger.info(f"✓ Hybrid retrieval successful: {len(documents)} docs retrieved")
 
-            return json.dumps({
-                "retrieved_docs": documents,
-                "retrieval_scores": scores,
-                "retrieval_method": "hybrid",
-            })
+            return json.dumps(
+                {
+                    "retrieved_docs": documents,
+                    "retrieval_scores": scores,
+                    "retrieval_method": "hybrid",
+                }
+            )
 
         except Exception as e:
             logger.warning(
-                f"Hybrid retrieval failed: {e}, "
-                f"falling back to keyword search",
-                exc_info=True
+                f"Hybrid retrieval failed: {e}, " f"falling back to keyword search", exc_info=True
             )
 
             # Graceful fallback to keyword search
@@ -221,7 +218,7 @@ class HybridRetrieverTool(Tool):
                 raise RuntimeError(
                     f"Both hybrid and keyword retrieval failed. "
                     f"Hybrid error: {e}, Keyword error: {fallback_error}"
-                )
+                ) from fallback_error
 
     def validate_params(self, params: dict[str, Any]) -> list[str]:
         """Validate tool parameters.

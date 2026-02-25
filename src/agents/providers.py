@@ -3,27 +3,27 @@
 Adapted from nanobot for ARK.
 """
 
-from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
 class ProviderSpec:
     """One LLM provider's metadata."""
-    name: str                       # config field name, e.g. "deepseek"
-    keywords: Tuple[str, ...]       # model-name keywords for matching
-    env_key: str                    # Env var for API key
-    display_name: str = ""          # Display name
-    litellm_prefix: str = ""        # Prefix for LiteLLM
-    default_api_base: str = ""      # Default API base URL
-    is_local: bool = False          # Local provider (Ollama, vLLM)
+
+    name: str  # config field name, e.g. "deepseek"
+    keywords: tuple[str, ...]  # model-name keywords for matching
+    env_key: str  # Env var for API key
+    display_name: str = ""  # Display name
+    litellm_prefix: str = ""  # Prefix for LiteLLM
+    default_api_base: str = ""  # Default API base URL
+    is_local: bool = False  # Local provider (Ollama, vLLM)
 
     @property
     def label(self) -> str:
         return self.display_name or self.name.title()
 
 
-PROVIDERS: Tuple[ProviderSpec, ...] = (
+PROVIDERS: tuple[ProviderSpec, ...] = (
     ProviderSpec(
         name="deepseek",
         keywords=("deepseek",),
@@ -66,7 +66,7 @@ PROVIDERS: Tuple[ProviderSpec, ...] = (
 )
 
 
-def find_by_name(name: str) -> Optional[ProviderSpec]:
+def find_by_name(name: str) -> ProviderSpec | None:
     """Find a provider spec by name."""
     for spec in PROVIDERS:
         if spec.name == name:
@@ -74,7 +74,7 @@ def find_by_name(name: str) -> Optional[ProviderSpec]:
     return None
 
 
-def find_by_model(model: str) -> Optional[ProviderSpec]:
+def find_by_model(model: str) -> ProviderSpec | None:
     """Match a provider by model-name keyword."""
     model_lower = model.lower()
     for spec in PROVIDERS:

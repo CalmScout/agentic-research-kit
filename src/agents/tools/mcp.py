@@ -3,10 +3,9 @@
 Adapted from nanobot framework for ARK.
 """
 
-import json
 from contextlib import AsyncExitStack
-from typing import Any, Dict, List, Optional
 from dataclasses import dataclass, field
+from typing import Any, cast
 
 import httpx
 from loguru import logger
@@ -18,12 +17,13 @@ from src.agents.tools.registry import ToolRegistry
 @dataclass
 class MCPServerConfig:
     """Configuration for an MCP server."""
+
     name: str
-    command: Optional[str] = None
-    args: List[str] = field(default_factory=list)
-    env: Optional[Dict[str, str]] = None
-    url: Optional[str] = None
-    headers: Optional[Dict[str, str]] = None
+    command: str | None = None
+    args: list[str] = field(default_factory=list)
+    env: dict[str, str] | None = None
+    url: str | None = None
+    headers: dict[str, str] | None = None
 
 
 class MCPToolWrapper(Tool):
@@ -43,14 +43,15 @@ class MCPToolWrapper(Tool):
 
     @property
     def description(self) -> str:
-        return self._description
+        return cast(str, self._description)
 
     @property
     def parameters(self) -> dict[str, Any]:
-        return self._parameters
+        return cast(dict[str, Any], self._parameters)
 
     async def execute(self, **kwargs: Any) -> str:
         from mcp import types
+
         try:
             result = await self._session.call_tool(self._original_name, arguments=kwargs)
             parts = []
@@ -63,16 +64,14 @@ class MCPToolWrapper(Tool):
                     parts.append(f"[Resource: {block.resource.uri}]")
                 else:
                     parts.append(str(block))
-            return "\n".join(parts) or "(no output)"
+            return cast(str, "\n".join(parts) or "(no output)")
         except Exception as e:
             logger.error(f"Error executing MCP tool {self._name}: {e}")
             return f"Error executing tool: {str(e)}"
 
 
 async def connect_mcp_servers(
-    mcp_servers: List[MCPServerConfig], 
-    registry: ToolRegistry, 
-    stack: AsyncExitStack
+    mcp_servers: list[MCPServerConfig], registry: ToolRegistry, stack: AsyncExitStack
 ) -> None:
     """Connect to configured MCP servers and register their tools.
 
@@ -92,20 +91,14 @@ async def connect_mcp_servers(
         name = cfg.name
         try:
             if cfg.command:
-                params = StdioServerParameters(
-                    command=cfg.command, 
-                    args=cfg.args, 
-                    env=cfg.env
-                )
+                params = StdioServerParameters(command=cfg.command, args=cfg.args, env=cfg.env)
                 read, write = await stack.enter_async_context(stdio_client(params))
             elif cfg.url:
                 from mcp.client.streamable_http import streamable_http_client
+
                 if cfg.headers:
                     http_client = await stack.enter_async_context(
-                        httpx.AsyncClient(
-                            headers=cfg.headers,
-                            follow_redirects=True
-                        )
+                        httpx.AsyncClient(headers=cfg.headers, follow_redirects=True)
                     )
                     read, write, _ = await stack.enter_async_context(
                         streamable_http_client(cfg.url, http_client=http_client)

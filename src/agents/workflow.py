@@ -11,22 +11,22 @@ Follows LangGraph best practices from the agents-from-scratch course.
 
 import os
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any, cast
 
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import END, START, StateGraph
+from loguru import logger
 
 from src.agents.base_state import BaseAgentState
-from src.agents.enhanced_retriever import enhanced_retriever_agent
 from src.agents.enhanced_response_generator import enhanced_response_generator_agent
-from src.agents.verification import verification_agent
+from src.agents.enhanced_retriever import enhanced_retriever_agent
 from src.agents.memory import MemoryStore
-
-from loguru import logger
+from src.agents.verification import verification_agent
 
 # -----------------------------------------------------------------------------
 # Phoenix Observability Setup
 # -----------------------------------------------------------------------------
 _phoenix_initialized = False
+
 
 def _initialize_phoenix():
     """Initialize Phoenix observability for tracing.
@@ -54,8 +54,7 @@ def _initialize_phoenix():
 
         # Get collector endpoint from env or use default
         collector_endpoint = os.getenv(
-            "PHOENIX_COLLECTOR_ENDPOINT",
-            "http://localhost:6006/v1/traces"
+            "PHOENIX_COLLECTOR_ENDPOINT", "http://localhost:6006/v1/traces"
         )
 
         logger.info(f"Initializing Phoenix observability at {collector_endpoint}...")
@@ -75,11 +74,15 @@ def _initialize_phoenix():
 
     except ImportError as e:
         logger.warning(f"Phoenix dependencies not installed: {e}")
-        logger.warning("  Install with: uv add arize-phoenix openinference-instrumentation-langchain")
+        logger.warning(
+            "  Install with: uv add arize-phoenix openinference-instrumentation-langchain"
+        )
     except Exception as e:
         logger.error(f"Failed to initialize Phoenix: {e}")
         import traceback
+
         logger.debug(traceback.format_exc())
+
 
 # Initialize Phoenix on module import
 _initialize_phoenix()
@@ -131,11 +134,11 @@ def create_multi_agent_workflow():
 
 async def query_with_agents(
     query: str,
-    query_image: str = None,
+    query_image: str | None = None,
     retrieval_mode: str = "hybrid",
     debug: bool = False,
-    workspace: Path = None
-) -> Dict[str, Any]:
+    workspace: Path | None = None,
+) -> dict[str, Any]:
     """Execute simplified multi-agent query pipeline.
 
     This is the main entry point for querying the system.
@@ -167,8 +170,8 @@ async def query_with_agents(
     logger.info(f"Starting multi-agent query: '{query[:50]}...' (mode={retrieval_mode})")
 
     # Initialize memory store
-    workspace = workspace or Path("./workspace")
-    memory = MemoryStore(workspace)
+    workspace_path = workspace or Path("./workspace")
+    memory = MemoryStore(workspace_path)
 
     # Load research context from memory
     memory_context = memory.get_research_context(query=query, max_chars=2000, top_k=5)
@@ -209,6 +212,7 @@ async def query_with_agents(
         if _phoenix_initialized:
             try:
                 from opentelemetry import trace
+
                 tracer = trace.get_tracer(__name__)
                 current_span = tracer.start_span("rag_evaluation")
                 with current_span as span:
@@ -234,11 +238,9 @@ async def query_with_agents(
         except Exception as e:
             logger.warning(f"Failed to log query to memory: {e}")
 
-        logger.info(
-            f"✓ Query complete: sources={len(result.get('sources', []))}"
-        )
+        logger.info(f"✓ Query complete: sources={len(result.get('sources', []))}")
 
-        return result
+        return cast(dict[str, Any], result)
 
     except Exception as e:
         logger.error(f"Workflow execution failed: {e}", exc_info=True)
@@ -253,7 +255,7 @@ async def query_with_agents(
         }
 
 
-def query_with_agents_sync(query: str, query_image: str = None) -> Dict[str, Any]:
+def query_with_agents_sync(query: str, query_image: str | None = None) -> dict[str, Any]:
     """Synchronous wrapper for query_with_agents.
 
     Useful for non-async contexts (e.g., CLI commands).
@@ -267,7 +269,8 @@ def query_with_agents_sync(query: str, query_image: str = None) -> Dict[str, Any
     """
     import asyncio
 
-    return asyncio.run(query_with_agents(query, query_image))
+    result: dict[str, Any] = asyncio.run(query_with_agents(query, query_image))
+    return cast(dict[str, Any], result)
 
 
 # Main entry point

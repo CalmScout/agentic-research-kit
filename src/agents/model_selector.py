@@ -7,18 +7,20 @@ Implements intelligent model selection with automatic fallback:
 """
 
 import logging
-from typing import Literal, Optional, Any, List
-from langchain_core.messages import BaseMessage, AIMessage, SystemMessage
+from typing import Any, cast
+
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_openai import ChatOpenAI
 
+from src.agents.providers import find_by_name
 from src.utils.config import Settings
-from src.agents.providers import find_by_name, find_by_model, ProviderSpec
 
 # Import Ollama support (optional)
 try:
     from langchain_community.chat_models import ChatOllama
+
     OLLAMA_AVAILABLE = True
 except ImportError:
     OLLAMA_AVAILABLE = False
@@ -34,11 +36,9 @@ class Qwen2LangChainWrapper(BaseChatModel):
     Adapts the existing Qwen2TextLLM to work with LangChain's async interface.
     """
 
-    qwen2_llm: Any = None  # Make qwen2_llm a class attribute for Pydantic
+    qwen2_llm: Any | None = None  # Make qwen2_llm a class attribute for Pydantic
 
-    model_config = {
-        "arbitrary_types_allowed": True
-    }
+    model_config = {"arbitrary_types_allowed": True}
 
     def __init__(self, qwen2_llm, **kwargs):
         """Initialize wrapper.
@@ -51,9 +51,9 @@ class Qwen2LangChainWrapper(BaseChatModel):
 
     def _generate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[Any] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generate response (synchronous).
@@ -68,9 +68,12 @@ class Qwen2LangChainWrapper(BaseChatModel):
             ChatResult with generation
         """
         # Extract text from messages
-        prompt = "\n".join([m.content for m in messages])
+        prompt = "\n".join([str(m.content) for m in messages])
 
         # Generate using Qwen2 (generate() accepts max_tokens param, maps to max_new_tokens internally)
+        if self.qwen2_llm is None:
+            raise ValueError("qwen2_llm is not initialized")
+
         response_text = self.qwen2_llm.generate(
             prompt,
             max_tokens=self.qwen2_llm.max_new_tokens,
@@ -84,9 +87,9 @@ class Qwen2LangChainWrapper(BaseChatModel):
 
     async def _agenerate(
         self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[Any] = None,
+        messages: list[BaseMessage],
+        stop: list[str] | None = None,
+        run_manager: Any | None = None,
         **kwargs: Any,
     ) -> ChatResult:
         """Generate response (async).
@@ -101,6 +104,7 @@ class Qwen2LangChainWrapper(BaseChatModel):
             ChatResult with generation
         """
         import asyncio
+
         return await asyncio.get_event_loop().run_in_executor(
             None, self._generate, messages, stop, run_manager, **kwargs
         )
@@ -109,7 +113,6 @@ class Qwen2LangChainWrapper(BaseChatModel):
     def _llm_type(self) -> str:
         """Return LLM type identifier."""
         return "qwen2_langchain_wrapper"
-
 
 
 class ModelSelector:
@@ -122,14 +125,14 @@ class ModelSelector:
     4. Configurable via environment variables
     """
 
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(self, settings: Settings | None = None):
         """Initialize model selector.
 
         Args:
             settings: Application settings (uses defaults if None)
         """
         self.settings = settings or Settings()
-        self._local_llm: Optional[BaseChatModel] = None
+        self._local_llm: BaseChatModel | None = None
         self._provider_cache: dict = {}  # Cache for provider instances
 
     def get_local_llm(self) -> BaseChatModel:
@@ -152,7 +155,7 @@ class ModelSelector:
                 logger.info("✓ Local Qwen3-8B model initialized (LangChain wrapper)")
             except Exception as e:
                 logger.error(f"Failed to initialize local LLM: {e}")
-                raise RuntimeError(f"Local LLM initialization failed: {e}")
+                raise RuntimeError(f"Local LLM initialization failed: {e}") from e
 
         return self._local_llm
 
@@ -171,7 +174,7 @@ class ModelSelector:
         """
         # Check cache
         if provider_name in self._provider_cache:
-            return self._provider_cache[provider_name]
+            return cast(BaseChatModel, self._provider_cache[provider_name])
 
         spec = find_by_name(provider_name)
         if not spec:
@@ -195,10 +198,13 @@ class ModelSelector:
             if not api_key:
                 # Fallback to direct env var check
                 import os
+
                 api_key = os.environ.get(spec.env_key)
 
             if not api_key:
-                raise ValueError(f"API key missing for provider {spec.name} (checked {spec.env_key})")
+                raise ValueError(
+                    f"API key missing for provider {spec.name} (checked {spec.env_key})"
+                )
 
             # Get model name from settings or default
             model_name = getattr(self.settings, f"{spec.name}_model", None)
@@ -211,14 +217,14 @@ class ModelSelector:
 
             llm = ChatOpenAI(
                 model=model_name,
-                api_key=api_key,
+                api_key=cast(Any, api_key),
                 base_url=base_url if base_url else None,
                 temperature=0.0,
             )
 
         logger.info(f"✓ {spec.label} LLM initialized")
         self._provider_cache[provider_name] = llm
-        return llm
+        return cast(BaseChatModel, llm)
 
     def get_llm_with_fallback(self) -> BaseChatModel:
         """Get LLM with automatic fallback.
@@ -235,7 +241,7 @@ class ModelSelector:
         primary_provider = self.settings.llm_provider
 
         # Get fallback chain
-        fallback_providers = getattr(self.settings, 'fallback_providers', ['local'])
+        fallback_providers = getattr(self.settings, "fallback_providers", ["local"])
 
         # Try primary provider
         try:
@@ -259,7 +265,7 @@ class ModelSelector:
 
 
 # Singleton instance for efficiency
-_selector: Optional[ModelSelector] = None
+_selector: ModelSelector | None = None
 
 
 def get_model_selector() -> ModelSelector:

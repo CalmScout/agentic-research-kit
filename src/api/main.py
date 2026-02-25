@@ -4,14 +4,13 @@ Provides REST API endpoints for querying the research system.
 """
 
 import logging
-import asyncio
-from typing import List, Dict, Any, Optional
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
+from lightrag.kg.shared_storage import initialize_share_data
 from pydantic import BaseModel, Field
 
 from src.agents.lancedb_storage import LanceDBDocStatusStorage
-from lightrag.kg.shared_storage import initialize_share_data
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,8 +41,8 @@ class Source(BaseModel):
     """Source document model."""
 
     text: str = Field(..., description="Source text/content")
-    url: Optional[str] = Field(None, description="Source URL")
-    score: Optional[float] = Field(None, description="Relevance score")
+    url: str | None = Field(None, description="Source URL")
+    score: float | None = Field(None, description="Relevance score")
 
 
 class QueryResponse(BaseModel):
@@ -51,8 +50,8 @@ class QueryResponse(BaseModel):
 
     query: str = Field(..., description="Original query")
     response: str = Field(..., description="Generated response")
-    sources: List[Source] = Field(default_factory=list, description="Source documents")
-    entities: List[str] = Field(default_factory=list, description="Extracted entities")
+    sources: list[Source] = Field(default_factory=list, description="Source documents")
+    entities: list[str] = Field(default_factory=list, description="Extracted entities")
     retrieved_count: int = Field(default=0, description="Number of documents retrieved")
 
 
@@ -81,7 +80,7 @@ async def get_doc_count() -> int:
             namespace="doc_status",
             workspace="default",
             global_config={"working_dir": "./rag_storage"},
-            embedding_func=None # Not needed for status count
+            embedding_func=None,  # Not needed for status count
         )
         await storage.initialize()
         counts = await storage.get_status_counts()
@@ -97,7 +96,7 @@ async def get_doc_count() -> int:
 # -------------------------------------------------------------------------
 
 
-@app.get("/", response_model=Dict[str, Any])
+@app.get("/", response_model=dict[str, Any])
 async def root():
     """Root endpoint with API information."""
     return {
@@ -153,7 +152,9 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         for source in result.get("sources", []):
             # Check if source is already grouped (has 'chunks')
             if "chunks" in source:
-                text_content = source["chunks"][0].get("content", "")[:500] if source["chunks"] else ""
+                text_content = (
+                    source["chunks"][0].get("content", "")[:500] if source["chunks"] else ""
+                )
             else:
                 text_content = source.get("text", source.get("content", ""))[:500]
 
@@ -183,20 +184,16 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Query processing failed: {str(e)}",
-        )
+        ) from e
 
 
-@app.get("/stats", response_model=Dict[str, Any])
+@app.get("/stats", response_model=dict[str, Any])
 async def stats():
     """Get system statistics."""
     return {
         "ingested_docs": await get_doc_count(),
         "architecture": "3-agent LangGraph",
-        "agents": [
-            "Enhanced Retriever",
-            "Enhanced Response Generator",
-            "Verification Agent"
-        ],
+        "agents": ["Enhanced Retriever", "Enhanced Response Generator", "Verification Agent"],
     }
 
 

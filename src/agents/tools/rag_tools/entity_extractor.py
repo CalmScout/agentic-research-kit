@@ -6,12 +6,11 @@ Extracts entities (people, organizations, locations) from text using local LLM.
 import json
 from typing import Any
 
-from langchain_core.messages import HumanMessage, SystemMessage
-
-from src.agents.tools.base import Tool
-from src.agents.model_selector import get_model_selector
-
+from langchain_core.messages import SystemMessage
 from loguru import logger
+
+from src.agents.model_selector import get_model_selector
+from src.agents.tools.base import Tool
 
 # Entity extraction prompt
 ENTITY_EXTRACTION_PROMPT = """Extract key entities from the following query.
@@ -42,23 +41,24 @@ class EntityExtractorTool(Tool):
         return {
             "type": "object",
             "properties": {
-                "text": {
-                    "type": "string",
-                    "description": "Text to extract entities from"
-                }
+                "text": {"type": "string", "description": "Text to extract entities from"}
             },
-            "required": ["text"]
+            "required": ["text"],
         }
 
-    async def execute(self, text: str, **kwargs) -> str:
+    async def execute(self, **kwargs: Any) -> str:
         """Extract entities from the given text.
 
         Args:
-            text: Text to extract entities from
+            **kwargs: Must contain 'text'
 
         Returns:
             JSON string with list of entities
         """
+        text = kwargs.get("text")
+        if not text:
+            return json.dumps([])
+
         try:
             model_selector = get_model_selector()
             llm = model_selector.get_local_llm()
@@ -71,15 +71,19 @@ class EntityExtractorTool(Tool):
             response = await llm.ainvoke(messages)
 
             # Parse entities
-            entities_text = response.content.strip()
-            if entities_text.lower() == "none":
-                entities = []
+            entities_text = response.content
+            if isinstance(entities_text, str):
+                entities_text = entities_text.strip()
+                if entities_text.lower() == "none":
+                    entities = []
+                else:
+                    entities = [
+                        e.strip()
+                        for e in entities_text.split(",")
+                        if e.strip() and e.strip().lower() != "none"
+                    ]
             else:
-                entities = [
-                    e.strip()
-                    for e in entities_text.split(",")
-                    if e.strip() and e.strip().lower() != "none"
-                ]
+                entities = []
 
             logger.debug(f"Extracted {len(entities)} entities: {entities}")
             return json.dumps(entities)

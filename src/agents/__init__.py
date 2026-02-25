@@ -8,5 +8,5 @@ __all__ = [
     "retriever",
     "evidence_aggregator",
     "response_generator",
-    "workflow"
+    "workflow",
 ]

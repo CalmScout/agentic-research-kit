@@ -1,27 +1,30 @@
 """Base class for communication channels."""
 
 from abc import ABC, abstractmethod
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Callable, Awaitable
+from typing import Any
 
 
 @dataclass
 class InboundMessage:
     """Represents a message coming from a channel."""
+
     channel: str
     sender_id: str
     chat_id: str
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class OutboundMessage:
     """Represents a message being sent to a channel."""
+
     channel: str
     chat_id: str
     content: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class Channel(ABC):

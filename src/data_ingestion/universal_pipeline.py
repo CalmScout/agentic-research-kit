@@ -7,14 +7,14 @@ into the RAG system. Provides a generic interface that works with different file
 import asyncio
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Union
-from tqdm import tqdm
-import pandas as pd
+from typing import Any, cast
 
-from .document_loaders import load_document, LOADER_REGISTRY
-from .generic_rag_ingester import GenericRAGIngester
-from ..utils.config import get_settings
+import pandas as pd
+from tqdm import tqdm
+
 from ..utils.logger import configure_logging
+from .document_loaders import LOADER_REGISTRY, load_document
+from .generic_rag_ingester import GenericRAGIngester
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +30,8 @@ class UniversalIngestionPipeline:
         self,
         working_dir: str,
         use_gpu: bool = True,
-        content_template: Optional[str] = None,
-        metadata_fields: Optional[List[str]] = None
+        content_template: str | None = None,
+        metadata_fields: list[str] | None = None,
     ):
         """Initialize the universal ingestion pipeline.
 
@@ -54,16 +54,13 @@ class UniversalIngestionPipeline:
         self.content_template = content_template
         self.metadata_fields = metadata_fields or []
 
-        logger.info(f"Initialized UniversalIngestionPipeline")
+        logger.info("Initialized UniversalIngestionPipeline")
         logger.info(f"Working directory: {self.working_dir}")
         logger.info(f"Supported formats: {', '.join(self.supported_formats)}")
 
     async def ingest_files(
-        self,
-        file_paths: List[str],
-        max_items: Optional[int] = None,
-        show_progress: bool = True
-    ) -> Dict[str, Any]:
+        self, file_paths: list[str], max_items: int | None = None, show_progress: bool = True
+    ) -> dict[str, Any]:
         """Ingest specific list of files.
 
         Args:
@@ -89,11 +86,13 @@ class UniversalIngestionPipeline:
         logger.info(f"📁 Files to process: {len(file_paths)}")
 
         # Stage 1: Load documents
-        logger.info(f"\n[Stage 1/2] Loading documents...")
+        logger.info("\n[Stage 1/2] Loading documents...")
         all_docs = []
         failed_files = []
 
-        files_iter = file_paths if not show_progress else tqdm(file_paths, desc="Loading files")
+        files_iter: Any = (
+            file_paths if not show_progress else tqdm(file_paths, desc="Loading files")
+        )
 
         for file_path in files_iter:
             try:
@@ -105,19 +104,21 @@ class UniversalIngestionPipeline:
                 logger.warning(f"Failed to load {file_path}: {e}")
                 failed_files.append({"file": file_path, "error": str(e)})
 
-        logger.info(f"✓ Loaded {len(all_docs)} chunks from {len(file_paths) - len(failed_files)} files")
+        logger.info(
+            f"✓ Loaded {len(all_docs)} chunks from {len(file_paths) - len(failed_files)} files"
+        )
         if failed_files:
             logger.warning(f"✗ Failed to load {len(failed_files)} files")
 
         # Stage 2: Ingest into RAG
-        logger.info(f"\n[Stage 2/2] Ingesting into RAG system...")
+        logger.info("\n[Stage 2/2] Ingesting into RAG system...")
 
         ingester = GenericRAGIngester(
             working_dir=str(self.working_dir),
             use_gpu=self.use_gpu,
             content_template=self.content_template,
-            content_fields=["title", "content", "source", "page"], # Include title for formatting
-            metadata_fields=self.metadata_fields
+            content_fields=["title", "content", "source", "page"],  # Include title for formatting
+            metadata_fields=self.metadata_fields,
         )
 
         try:
@@ -126,7 +127,7 @@ class UniversalIngestionPipeline:
             # but for universal ingestion, we need to adapt
             ingest_stats = await self._ingest_documents(ingester, all_docs)
 
-            logger.info(f"✓ Ingestion complete!")
+            logger.info("✓ Ingestion complete!")
             logger.info(f"  - Items ingested: {ingest_stats.get('total_items', 0)}")
 
         except Exception as e:
@@ -150,7 +151,9 @@ class UniversalIngestionPipeline:
         logger.info(f"Successful: {final_stats['successful_files']}")
         logger.info(f"Failed: {final_stats['failed_files']}")
         logger.info(f"Total chunks: {final_stats['total_chunks']}")
-        logger.info(f"Items ingested: {final_stats['ingest_stats'].get('total_items', 0)}")
+        logger.info(
+            f"Items ingested: {cast(Any, final_stats['ingest_stats']).get('total_items', 0)}"
+        )
 
         return final_stats
 
@@ -159,8 +162,8 @@ class UniversalIngestionPipeline:
         dir_path: str,
         pattern: str = "**/*.pdf",
         recursive: bool = True,
-        max_items: Optional[int] = None
-    ) -> Dict[str, Any]:
+        max_items: int | None = None,
+    ) -> dict[str, Any]:
         """Ingest all documents matching pattern from a directory.
 
         Args:
@@ -181,8 +184,6 @@ class UniversalIngestionPipeline:
             raise ValueError(f"Not a directory: {dir_path}")
 
         # Find matching files
-        glob_type = "**/*" if recursive else "*"
-        full_pattern = f"{glob_type}" if pattern == "**/*" else pattern
 
         # Use rglob for recursive, glob for non-recursive
         if recursive:
@@ -192,7 +193,8 @@ class UniversalIngestionPipeline:
 
         # Filter by supported extensions
         supported_files = [
-            str(f) for f in matching_files
+            str(f)
+            for f in matching_files
             if f.is_file() and f.suffix.lower() in self.supported_formats
         ]
 
@@ -209,16 +211,11 @@ class UniversalIngestionPipeline:
 
         logger.info(f"Found {len(supported_files)} files matching pattern")
 
-        return await self.ingest_files(
-            file_paths=supported_files,
-            max_items=max_items
-        )
+        return await self.ingest_files(file_paths=supported_files, max_items=max_items)
 
     async def _ingest_documents(
-        self,
-        ingester: GenericRAGIngester,
-        docs: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
+        self, ingester: GenericRAGIngester, docs: list[dict[str, Any]]
+    ) -> dict[str, Any]:
         """Ingest loaded documents into RAG system.
 
         Args:
@@ -231,13 +228,13 @@ class UniversalIngestionPipeline:
         # Convert documents to DataFrame format expected by GenericRAGIngester
         df_data = []
 
-        for doc in docs:
+        for doc in cast(list[dict[str, Any]], docs):
             row = {
-                "title": doc.get("metadata", {}).get("title", "Untitled"),
+                "title": cast(Any, doc.get("metadata", {})).get("title", "Untitled"),
                 "content": doc.get("content", ""),
-                "source": doc.get("metadata", {}).get("source", ""),
-                "page": doc.get("metadata", {}).get("page", 1),
-                "doc_type": doc.get("metadata", {}).get("doc_type", "unknown")
+                "source": cast(Any, doc.get("metadata", {})).get("source", ""),
+                "page": cast(Any, doc.get("metadata", {})).get("page", 1),
+                "doc_type": cast(Any, doc.get("metadata", {})).get("doc_type", "unknown"),
             }
             df_data.append(row)
 
@@ -252,11 +249,11 @@ class UniversalIngestionPipeline:
 
 
 def run_sync_universal_ingestion(
-    file_paths: List[str],
+    file_paths: list[str],
     working_dir: str = "./rag_storage",
     use_gpu: bool = True,
-    max_items: Optional[int] = None
-) -> Dict:
+    max_items: int | None = None,
+) -> dict:
     """Run universal ingestion pipeline synchronously (for CLI).
 
     Args:
@@ -278,8 +275,8 @@ def run_sync_directory_ingestion(
     working_dir: str = "./rag_storage",
     use_gpu: bool = True,
     recursive: bool = True,
-    max_items: Optional[int] = None
-) -> Dict:
+    max_items: int | None = None,
+) -> dict:
     """Run directory ingestion pipeline synchronously (for CLI).
 
     Args:
@@ -294,9 +291,8 @@ def run_sync_directory_ingestion(
         Pipeline statistics dictionary
     """
     pipeline = UniversalIngestionPipeline(working_dir=working_dir, use_gpu=use_gpu)
-    return asyncio.run(pipeline.ingest_directory(
-        dir_path=dir_path,
-        pattern=pattern,
-        recursive=recursive,
-        max_items=max_items
-    ))
+    return asyncio.run(
+        pipeline.ingest_directory(
+            dir_path=dir_path, pattern=pattern, recursive=recursive, max_items=max_items
+        )
+    )

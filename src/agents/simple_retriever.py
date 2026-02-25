@@ -3,15 +3,14 @@
 Provides basic retrieval from RAG-Anything without complex async issues.
 """
 
-import logging
-from typing import Dict, Any, List
 import json
-import numpy as np
+import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-async def simple_retriever(query: str, top_k: int = 10) -> Dict[str, Any]:
+async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
     """Simple retriever that directly accesses RAG-Anything storage.
 
     Args:
@@ -25,18 +24,18 @@ async def simple_retriever(query: str, top_k: int = 10) -> Dict[str, Any]:
 
     try:
         # Load documents from kv_store_full_docs.json
-        with open("./rag_storage/kv_store_full_docs.json", "r") as f:
+        with open("./rag_storage/kv_store_full_docs.json") as f:
             docs = json.load(f)
 
         # Load embeddings from vdb_chunks.json
-        with open("./rag_storage/vdb_chunks.json", "r") as f:
+        with open("./rag_storage/vdb_chunks.json") as f:
             vdb_data = json.load(f)
-            embeddings = vdb_data.get("matrix", [])
-            embedding_dim = vdb_data.get("embedding_dim", 2048)
+            vdb_data.get("matrix", [])
+            vdb_data.get("embedding_dim", 2048)
 
         # Load entity chunks for knowledge graph traversal
-        with open("./rag_storage/kv_store_entity_chunks.json", "r") as f:
-            entity_chunks = json.load(f)
+        with open("./rag_storage/kv_store_entity_chunks.json") as f:
+            json.load(f)
 
         # Get doc IDs
         doc_ids = list(docs.keys())
@@ -59,13 +58,15 @@ async def simple_retriever(query: str, top_k: int = 10) -> Dict[str, Any]:
             score = overlap / max(len(words_in_query), 1)
 
             if score > 0:
-                scored_docs.append({
-                    "doc_id": doc_id,
-                    "score": score,
-                    "text": doc_content[:500],  # First 500 chars
-                    "url": docs[doc_id].get("file_path", "Unknown"),
-                    "entities": [],  # Could add entity extraction here
-                })
+                scored_docs.append(
+                    {
+                        "doc_id": doc_id,
+                        "score": score,
+                        "text": doc_content[:500],  # First 500 chars
+                        "url": docs[doc_id].get("file_path", "Unknown"),
+                        "entities": [],  # Could add entity extraction here
+                    }
+                )
 
         # Sort by score descending
         scored_docs.sort(key=lambda x: x["score"], reverse=True)

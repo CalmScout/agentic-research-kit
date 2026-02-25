@@ -4,18 +4,22 @@ This module provides direct access to LightRAG without using the HTTP server.
 It uses local Qwen3-VL embedding models for query embedding and retrieval.
 """
 
-import asyncio
 import logging
-from typing import Dict, Any, List, Callable
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any, cast
+
 import numpy as np
-
 from lightrag import LightRAG, QueryParam
+from lightrag.kg import STORAGE_IMPLEMENTATIONS, STORAGES
 from lightrag.utils import EmbeddingFunc, lazy_external_import
-from lightrag.kg import STORAGES, STORAGE_IMPLEMENTATIONS
 
+from src.agents.lancedb_storage import (
+    LanceDBDocStatusStorage,
+    LanceDBKVStorage,
+    LanceDBVectorDBStorage,
+)
 from src.utils.vision_embedding import Qwen3VLEmbedding, get_qwen2_llm
-from src.agents.lancedb_storage import LanceDBKVStorage, LanceDBDocStatusStorage, LanceDBVectorDBStorage
 
 # Register custom LanceDB storages names
 STORAGES["LanceDBKVStorage"] = "LanceDBKVStorage"
@@ -30,25 +34,27 @@ STORAGE_IMPLEMENTATIONS["VECTOR_STORAGE"]["implementations"].append("LanceDBVect
 # Monkey-patch LightRAG to support our custom classes directly
 _original_get_storage_class = LightRAG._get_storage_class
 
-def _patched_get_storage_class(self, storage_name: str) -> Callable[..., Any]:
+
+def _patched_get_storage_class(self, storage_name: str) -> Any:
     if storage_name == "LanceDBKVStorage":
         return LanceDBKVStorage
     elif storage_name == "LanceDBDocStatusStorage":
         return LanceDBDocStatusStorage
     elif storage_name == "LanceDBVectorDBStorage":
         return LanceDBVectorDBStorage
-    
+
     # Handle standard LightRAG storages or others
     try:
-        return _original_get_storage_class(self, storage_name)
+        return cast(Callable[..., Any], _original_get_storage_class(self, storage_name))
     except Exception:
         # Fallback for dynamic import if not handled by original
         if storage_name in STORAGES:
             import_path = STORAGES[storage_name]
             if not isinstance(import_path, str):
                 return import_path
-            return lazy_external_import(import_path, storage_name)
+            return cast(Callable[..., Any], lazy_external_import(import_path, storage_name))
         raise
+
 
 LightRAG._get_storage_class = _patched_get_storage_class
 
@@ -70,17 +76,17 @@ class DirectLightRAGRetriever:
         """
         self.working_dir = Path(working_dir)
         self.device = device
-        self._rag: LightRAG = None
-        self._embedding_model: Qwen3VLEmbedding = None
+        self._rag: LightRAG | None = None
+        self._embedding_model: Qwen3VLEmbedding | None = None
 
     def _get_embedding_model(self) -> Qwen3VLEmbedding:
         """Get or create embedding model instance (lazy loading)."""
         if self._embedding_model is None:
-            logger.info(f"Loading local embedding model: Qwen/Qwen3-VL-Embedding-2B")
+            logger.info("Loading local embedding model: Qwen/Qwen3-VL-Embedding-2B")
             self._embedding_model = Qwen3VLEmbedding(
                 model_name="Qwen/Qwen3-VL-Embedding-2B",
                 device=self.device,
-                torch_dtype="float16"  # Use float16 instead of "auto"
+                torch_dtype="float16",  # Use float16 instead of "auto"
             )
             # Test embedding to get dimension
             test_emb = self._embedding_model.embed_text("test")
@@ -121,35 +127,32 @@ class DirectLightRAGRetriever:
         The function signature must match LightRAG's expectations:
             async def llm_model_func(
                 prompt: str,
-                system_prompt: str = None,
-                history_messages: list = None,
+                system_prompt: str | None = None,
+                history_messages: list[Any] | None = None,
                 **kwargs
             ) -> str
         """
+
         async def llm_model_func(
             prompt: str,
-            system_prompt: str = None,
-            history_messages: list = None,
-            **kwargs
+            system_prompt: str | None = None,
+            history_messages: list[Any] | None = None,
+            **kwargs: Any,
         ) -> str:
             """LLM function for LightRAG entity extraction."""
             try:
                 # Lazy load LLM on first call (uses singleton from vision_embedding.py)
-                if not hasattr(self, '_llm'):
+                if not hasattr(self, "_llm"):
                     logger.info("Initializing Qwen2.5-1.5B for LightRAG LLM operations...")
                     self._llm = get_qwen2_llm(
-                        model_name="Qwen/Qwen2.5-1.5B-Instruct",
-                        device=self.device
+                        model_name="Qwen/Qwen2.5-1.5B-Instruct", device=self.device
                     )
                     logger.info("✓ LightRAG LLM initialized")
 
                 # Generate response using sync call in async context
                 # The Qwen2TextLLM.generate() is synchronous, so we can call it directly
                 response = self._llm.generate(
-                    prompt=prompt,
-                    system_prompt=system_prompt,
-                    temperature=0.0,
-                    max_tokens=512
+                    prompt=prompt, system_prompt=system_prompt, temperature=0.0, max_tokens=512
                 )
                 return response
 
@@ -167,7 +170,9 @@ class DirectLightRAGRetriever:
             LightRAG instance configured with local embedding model
         """
         if self._rag is None:
-            logger.info(f"Initializing LightRAG with local models (working_dir: {self.working_dir})")
+            logger.info(
+                f"Initializing LightRAG with local models (working_dir: {self.working_dir})"
+            )
 
             # Create embedding function
             embedding_func = EmbeddingFunc(
@@ -193,7 +198,7 @@ class DirectLightRAGRetriever:
 
         return self._rag
 
-    async def retrieve(self, query: str, top_k: int = 50, mode: str = "naive") -> Dict[str, Any]:
+    async def retrieve(self, query: str, top_k: int = 50, mode: str = "naive") -> dict[str, Any]:
         """Retrieve documents using LightRAG.
 
         Args:
@@ -211,10 +216,7 @@ class DirectLightRAGRetriever:
         try:
             # Perform retrieval using LightRAG
             # Use aquery_data for structured retrieval results
-            result = await rag.aquery_data(
-                query,
-                param=QueryParam(mode=mode)
-            )
+            result = await rag.aquery_data(query, param=QueryParam(mode=mode))
 
             # Parse result to extract documents
             # aquery_data returns: {"status": "success", "data": {"chunks": [...], ...}}
@@ -224,14 +226,16 @@ class DirectLightRAGRetriever:
             if isinstance(result, dict):
                 data = result.get("data", {})
                 chunks = data.get("chunks", [])
-                
+
                 # Support old format if needed
                 if not chunks and "context" in result:
                     context = result["context"]
                     if isinstance(context, list):
                         chunks = context
                     elif isinstance(context, str):
-                        chunks = [{"content": c.strip()} for c in context.split("\n\n") if c.strip()]
+                        chunks = [
+                            {"content": c.strip()} for c in context.split("\n\n") if c.strip()
+                        ]
 
                 for i, item in enumerate(chunks):
                     if isinstance(item, dict):
@@ -242,13 +246,15 @@ class DirectLightRAGRetriever:
                                 "source": "lightrag_direct",
                                 "mode": mode,
                                 "file_path": item.get("file_path", ""),
-                                "chunk_id": item.get("chunk_id", "")
+                                "chunk_id": item.get("chunk_id", ""),
                             },
                         }
                         documents.append(doc)
                         scores.append(doc["score"])
 
-            logger.info(f"✓ Retrieved {len(documents)} documents from LightRAG (direct, mode={mode})")
+            logger.info(
+                f"✓ Retrieved {len(documents)} documents from LightRAG (direct, mode={mode})"
+            )
 
             return {
                 "retrieved_docs": documents,
@@ -258,11 +264,11 @@ class DirectLightRAGRetriever:
 
         except Exception as e:
             logger.error(f"Direct LightRAG retrieval failed: {e}", exc_info=True)
-            raise RuntimeError(f"Failed to retrieve using direct LightRAG: {e}")
+            return cast(dict[str, Any], {"error": str(e)})
 
 
 # Singleton instance
-_retriever: DirectLightRAGRetriever = None
+_retriever: DirectLightRAGRetriever | None = None
 
 
 def get_direct_lightrag_retriever() -> DirectLightRAGRetriever:

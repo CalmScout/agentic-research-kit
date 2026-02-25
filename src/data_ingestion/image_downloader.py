@@ -1,11 +1,11 @@
 """Async image downloader with Wayback Machine fallback."""
 
-import aiohttp
 import asyncio
-from pathlib import Path
-from typing import Dict, List, Optional
-from tqdm import tqdm
 import logging
+from pathlib import Path
+
+import aiohttp
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class AsyncImageDownloader:
         output_dir: str = "./data/images",
         timeout: int = 10,
         max_workers: int = 10,
-        max_retries: int = 3
+        max_retries: int = 3,
     ):
         """Initialize downloader.
 
@@ -35,15 +35,15 @@ class AsyncImageDownloader:
         self.max_retries = max_retries
 
         # Track failed downloads
-        self.failed_urls: List[str] = []
+        self.failed_urls: list[str] = []
 
     async def download_single(
         self,
         session: aiohttp.ClientSession,
         url: str,
         claim_id: int,
-        semaphore: Optional[asyncio.Semaphore] = None
-    ) -> Optional[str]:
+        semaphore: asyncio.Semaphore | None = None,
+    ) -> str | None:
         """Download single image with fallback.
 
         Args:
@@ -63,11 +63,8 @@ class AsyncImageDownloader:
             return await self._download_with_retries(session, url, claim_id)
 
     async def _download_with_retries(
-        self,
-        session: aiohttp.ClientSession,
-        url: str,
-        claim_id: int
-    ) -> Optional[str]:
+        self, session: aiohttp.ClientSession, url: str, claim_id: int
+    ) -> str | None:
         """Download image with retries and Wayback fallback.
 
         Args:
@@ -80,7 +77,7 @@ class AsyncImageDownloader:
         """
         # Check for existing files (simple caching)
         # Try common extensions
-        for ext in ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']:
+        for ext in [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"]:
             existing_path = self.output_dir / f"claim_{claim_id}{ext}"
             if existing_path.exists():
                 logger.debug(f"⊗ Skipped (already cached): {existing_path.name}")
@@ -91,16 +88,16 @@ class AsyncImageDownloader:
             try:
                 async with session.get(url, timeout=self.timeout) as response:
                     if response.status == 200:
-                        content_type = response.headers.get('Content-Type', '')
+                        content_type = response.headers.get("Content-Type", "")
                         ext = self._get_extension(content_type)
                         path = self.output_dir / f"claim_{claim_id}{ext}"
 
-                        with open(path, 'wb') as f:
+                        with open(path, "wb") as f:
                             f.write(await response.read())
 
                         logger.debug(f"✓ Downloaded: {url}")
                         return str(path)
-            except (asyncio.TimeoutError, aiohttp.ClientError) as e:
+            except (TimeoutError, aiohttp.ClientError) as e:
                 if attempt < self.max_retries - 1:
                     logger.debug(f"Retry {attempt + 1}/{self.max_retries} for {url}")
                     await asyncio.sleep(1)  # Wait before retry
@@ -118,11 +115,8 @@ class AsyncImageDownloader:
         return None
 
     async def _wayback_fallback(
-        self,
-        session: aiohttp.ClientSession,
-        url: str,
-        claim_id: int
-    ) -> Optional[str]:
+        self, session: aiohttp.ClientSession, url: str, claim_id: int
+    ) -> str | None:
         """Try Wayback Machine if direct download fails.
 
         Args:
@@ -138,11 +132,11 @@ class AsyncImageDownloader:
         try:
             async with session.get(wayback_url, timeout=self.timeout) as response:
                 if response.status == 200:
-                    content_type = response.headers.get('Content-Type', '')
+                    content_type = response.headers.get("Content-Type", "")
                     ext = self._get_extension(content_type)
                     path = self.output_dir / f"claim_{claim_id}_wayback{ext}"
 
-                    with open(path, 'wb') as f:
+                    with open(path, "wb") as f:
                         f.write(await response.read())
 
                     logger.info(f"✓ Retrieved from Wayback: {url}")
@@ -152,11 +146,7 @@ class AsyncImageDownloader:
 
         return None
 
-    async def download_batch(
-        self,
-        urls: List[str],
-        claim_ids: List[int]
-    ) -> Dict[int, str]:
+    async def download_batch(self, urls: list[str], claim_ids: list[int]) -> dict[int, str]:
         """Download batch of images.
 
         Args:
@@ -177,7 +167,7 @@ class AsyncImageDownloader:
             # Create tasks
             tasks = [
                 self.download_single(session, url, cid, semaphore)
-                for url, cid in zip(urls, claim_ids)
+                for url, cid in zip(urls, claim_ids, strict=False)
             ]
 
             # Download with progress bar
@@ -187,21 +177,26 @@ class AsyncImageDownloader:
                     result = await future
                     results.append(result)
                     pbar.update(1)
-                    pbar.set_postfix(success=sum(1 for r in results if r), failed=sum(1 for r in results if not r))
+                    pbar.set_postfix(
+                        success=sum(1 for r in results if r),
+                        failed=sum(1 for r in results if not r),
+                    )
 
         # Build mapping: claim_id -> local_path
         success_count = 0
         wayback_count = 0
         image_map = {}
 
-        for cid, path in zip(claim_ids, results):
+        for cid, path in zip(claim_ids, results, strict=False):
             if path:
                 image_map[cid] = path
                 success_count += 1
-                if '_wayback' in path:
+                if "_wayback" in path:
                     wayback_count += 1
 
-        logger.info(f"Download complete: {success_count} successful ({wayback_count} from Wayback), {len(self.failed_urls)} failed")
+        logger.info(
+            f"Download complete: {success_count} successful ({wayback_count} from Wayback), {len(self.failed_urls)} failed"
+        )
 
         return image_map
 
@@ -216,21 +211,21 @@ class AsyncImageDownloader:
         """
         content_type = content_type.lower()
 
-        if 'jpeg' in content_type or 'jpg' in content_type:
-            return '.jpg'
-        elif 'png' in content_type:
-            return '.png'
-        elif 'webp' in content_type:
-            return '.webp'
-        elif 'gif' in content_type:
-            return '.gif'
-        elif 'bmp' in content_type:
-            return '.bmp'
+        if "jpeg" in content_type or "jpg" in content_type:
+            return ".jpg"
+        elif "png" in content_type:
+            return ".png"
+        elif "webp" in content_type:
+            return ".webp"
+        elif "gif" in content_type:
+            return ".gif"
+        elif "bmp" in content_type:
+            return ".bmp"
         else:
             # Default to jpg
-            return '.jpg'
+            return ".jpg"
 
-    def get_failed_urls(self) -> List[str]:
+    def get_failed_urls(self) -> list[str]:
         """Get list of failed download URLs.
 
         Returns:

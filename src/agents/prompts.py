@@ -4,10 +4,9 @@ Provides template-based prompt system that allows customization for different
 use cases (research, fact-checking, analysis, etc.) without code changes.
 """
 
-from dataclasses import dataclass
-from typing import Dict, Any, Optional
-from pathlib import Path
 import logging
+from dataclasses import dataclass
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -84,14 +83,14 @@ Your role is to provide accurate, well-researched responses based on the availab
 Based on the evidence above, please provide a comprehensive response to the research question.""",
     response_instructions="""**Response Guidelines**:
 1. Provide a direct, evidence-based response.
-2. Cite sources using [Source X] notation. 
-3. IMPORTANT: Use ONLY the source numbers provided in the "Sources" section above (e.g., if only Source 1 is listed, only use [Source 1]). 
+2. Cite sources using [Source X] notation.
+3. IMPORTANT: Use ONLY the source numbers provided in the "Sources" section above (e.g., if only Source 1 is listed, only use [Source 1]).
 4. DO NOT invent or hallucinate additional source numbers (like [Source 2], [Source 3], etc.) if they are not explicitly listed.
 5. Be transparent about evidence quality - acknowledge if all information comes from a single source.
 6. Keep your response concise but informative (under 400 words).
 7. Do NOT include metadata or confidence levels in your response.
 
-Begin your response directly with the answer."""
+Begin your response directly with the answer.""",
 )
 
 
@@ -122,7 +121,7 @@ Please provide a detailed analysis addressing this request.""",
 6. Keep your response focused (under 500 words)
 7. Do NOT include metadata in your response
 
-Begin your analysis directly."""
+Begin your analysis directly.""",
 )
 
 
@@ -142,7 +141,7 @@ QA_TEMPLATE = PromptTemplate(
 3. Keep your response concise (under 200 words)
 4. Indicate if information is insufficient to answer completely
 
-Begin your answer directly."""
+Begin your answer directly.""",
 )
 
 
@@ -150,7 +149,7 @@ Begin your answer directly."""
 # Template Registry
 # -------------------------------------------------------------------------
 
-PROMPT_TEMPLATES: Dict[str, PromptTemplate] = {
+PROMPT_TEMPLATES: dict[str, PromptTemplate] = {
     "research": RESEARCH_TEMPLATE,
     "analysis": ANALYSIS_TEMPLATE,
     "qa": QA_TEMPLATE,
@@ -172,10 +171,7 @@ def get_template(template_name: str) -> PromptTemplate:
     """
     if template_name not in PROMPT_TEMPLATES:
         available = ", ".join(PROMPT_TEMPLATES.keys())
-        raise ValueError(
-            f"Unknown template: {template_name}. "
-            f"Available templates: {available}"
-        )
+        raise ValueError(f"Unknown template: {template_name}. " f"Available templates: {available}")
 
     return PROMPT_TEMPLATES[template_name]
 
@@ -214,17 +210,17 @@ def load_template_from_file(file_path: str) -> PromptTemplate:
     if path.suffix == ".json":
         import json
 
-        with open(path, 'r') as f:
+        with open(path) as f:
             data = json.load(f)
 
         return PromptTemplate(
             system_prompt=data.get("system_prompt", ""),
             user_prompt_template=data.get("user_prompt_template", "{query}"),
-            response_instructions=data.get("response_instructions", "")
+            response_instructions=data.get("response_instructions", ""),
         )
     else:
         # Treat as text file with sections on separate lines
-        with open(path, 'r') as f:
+        with open(path) as f:
             lines = [line.strip() for line in f.readlines() if line.strip()]
 
         if len(lines) < 2:
@@ -236,7 +232,7 @@ def load_template_from_file(file_path: str) -> PromptTemplate:
         return PromptTemplate(
             system_prompt=lines[0],
             user_prompt_template=lines[1],
-            response_instructions=lines[2] if len(lines) > 2 else ""
+            response_instructions=lines[2] if len(lines) > 2 else "",
         )
 
 
@@ -251,7 +247,7 @@ def register_template(name: str, template: PromptTemplate) -> None:
     logger.info(f"Registered custom prompt template: {name}")
 
 
-def list_templates() -> Dict[str, str]:
+def list_templates() -> dict[str, str]:
     """List all available prompt templates.
 
     Returns:

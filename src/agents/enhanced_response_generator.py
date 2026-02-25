@@ -11,20 +11,18 @@ Agent 2 in the simplified 2-agent workflow.
 
 import json
 import re
-from typing import Dict, Any, List, Optional
 from contextlib import AsyncExitStack
+from typing import Any, cast
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import SystemMessage
+from loguru import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.model_selector import get_model_selector
-from src.agents.prompts import get_template, PromptTemplate
-from src.agents.reranker import get_reranker
-from src.agents.tools.registry import ToolRegistry
+from src.agents.prompts import get_template
 from src.agents.tools.rag_tools.reranker import RerankerTool
+from src.agents.tools.registry import ToolRegistry
 from src.agents.utils import group_docs_by_source
-
-from loguru import logger
 
 # Evidence synthesis prompt
 EVIDENCE_SYNTHESIS_PROMPT = """You are an expert at synthesizing research evidence.
@@ -49,7 +47,7 @@ Keep your response under 200 words.
 """
 
 
-def format_evidence_for_synthesis(evidence_list: List[Dict[str, Any]], max_items: int = 10) -> str:
+def format_evidence_for_synthesis(evidence_list: list[dict[str, Any]], max_items: int = 10) -> str:
     """Format evidence documents for synthesis.
 
     Args:
@@ -77,7 +75,7 @@ Source: {source}
     return "\n".join(formatted_items)
 
 
-def format_sources_for_prompt(grouped_sources: List[Dict[str, Any]]) -> str:
+def format_sources_for_prompt(grouped_sources: list[dict[str, Any]]) -> str:
     """Format grouped sources for prompt.
 
     Args:
@@ -94,32 +92,33 @@ def format_sources_for_prompt(grouped_sources: List[Dict[str, Any]]) -> str:
     for i, src in enumerate(grouped_sources, 1):
         title = src.get("title", "Untitled Document")
         source_id = src.get("source", "Unknown")
-        
+
         formatted.append(f"--- SOURCE {i} START ---")
         formatted.append(f"IDENTIFIER: [Source {i}]")
         formatted.append(f"TITLE: {title}")
         formatted.append(f"REFERENCE: {source_id}")
         formatted.append("CONTENT:")
-        
+
         for j, chunk in enumerate(src.get("chunks", []), 1):
             content = chunk.get("content", "")
             # Clean up redundant title if present
-            content = re.sub(r'^Title:.*?\nContent:\s*', '', content, flags=re.DOTALL | re.MULTILINE).strip()
-            
+            content = re.sub(
+                r"^Title:.*?\nContent:\s*", "", content, flags=re.DOTALL | re.MULTILINE
+            ).strip()
+
             if len(src.get("chunks", [])) > 1:
                 formatted.append(f"   (Part {j}): {content}")
             else:
                 formatted.append(f"   {content}")
-        
+
         formatted.append(f"--- SOURCE {i} END ---\n")
 
     return "\n".join(formatted)
 
 
 async def enhanced_response_generator_agent(
-    state: BaseAgentState,
-    prompt_template: Optional[str] = None
-) -> Dict[str, Any]:
+    state: BaseAgentState, prompt_template: str | None = None
+) -> dict[str, Any]:
     """Enhanced Response Generator Agent (Evidence Aggregator + Response Generator).
 
     Combines evidence aggregation and response generation in a single agent.
@@ -146,7 +145,7 @@ async def enhanced_response_generator_agent(
         try:
             # Initialize tool registry
             registry = ToolRegistry()
-            stack.push_async_callback(registry.close) # Ensure registry is closed
+            stack.push_async_callback(registry.close)  # Ensure registry is closed
             registry.register(RerankerTool())
 
             # -------------------------------------------------------------
@@ -160,11 +159,9 @@ async def enhanced_response_generator_agent(
                 }
 
             # Use the reranker tool
-            rerank_result = await registry.execute("reranker", {
-                "docs": retrieved_docs,
-                "query": query,
-                "top_k": 10
-            })
+            rerank_result = await registry.execute(
+                "reranker", {"docs": retrieved_docs, "query": query, "top_k": 10}
+            )
 
             rerank_data = json.loads(rerank_result)
             reranked_docs = rerank_data.get("reranked_docs", [])
@@ -197,7 +194,7 @@ async def enhanced_response_generator_agent(
                 messages = [SystemMessage(content=prompt)]
                 response = await llm.ainvoke(messages)
 
-                evidence_summary = response.content.strip()
+                evidence_summary = cast(str, response.content).strip()
                 logger.debug(f"Evidence summary: {evidence_summary[:100]}...")
 
             except Exception as e:
@@ -231,7 +228,7 @@ async def enhanced_response_generator_agent(
                 sources_text = format_sources_for_prompt(top_sources)
 
                 # Generate prompt from template
-                user_prompt = template.format_user_prompt(
+                template.format_user_prompt(
                     query=query,
                     evidence_summary=evidence_summary,
                     sources_text=sources_text,
@@ -243,7 +240,7 @@ async def enhanced_response_generator_agent(
                     evidence_summary=evidence_summary,
                     sources_text=sources_text,
                 )
-                
+
                 # ADD EXTRA EMPHASIS ON SOURCE COUNT
                 source_count_warning = f"\n\nIMPORTANT: There are ONLY {len(top_sources)} sources provided above. Do NOT cite any Source number greater than {len(top_sources)}."
                 full_prompt += source_count_warning
@@ -252,7 +249,7 @@ async def enhanced_response_generator_agent(
                 messages = [SystemMessage(content=full_prompt)]
                 response = await llm.ainvoke(messages)
 
-                response_text = response.content.strip()
+                response_text = cast(str, response.content).strip()
                 logger.debug(f"Generated response: {response_text[:100]}...")
 
             except Exception as e:

@@ -4,7 +4,8 @@ Defines the base state that flows through all agents using LangGraph's
 state management. Domain-specific states can extend this base.
 """
 
-from typing import TypedDict, List, Optional, Dict, Any
+from typing import Annotated, NotRequired, TypedDict
+
 from langgraph.graph import add_messages
 
 
@@ -43,39 +44,39 @@ class BaseAgentState(TypedDict):
     # Input
     # -------------------------------------------------------------------------
     query: str
-    query_image: Optional[str]
-    retrieval_mode: Optional[str]  # LightRAG mode: naive, local, global, hybrid
-    memory_context: Optional[str]  # Research context from memory store
+    query_image: str | None
+    retrieval_mode: str | None  # LightRAG mode: naive, local, global, hybrid
+    memory_context: str | None  # Research context from memory store
 
     # -------------------------------------------------------------------------
     # Agent 1: Enhanced Retriever output
     # -------------------------------------------------------------------------
     query_type: str  # "text" or "multimodal"
-    entities: List[str]
-    query_embedding: List[float]
-    retrieved_docs: List[dict]
-    retrieval_scores: List[float]
+    entities: list[str]
+    query_embedding: list[float]
+    retrieved_docs: list[dict]
+    retrieval_scores: list[float]
     retrieval_method: str  # "vector", "bm25", "hybrid", "keyword"
 
     # -------------------------------------------------------------------------
     # Agent 2: Enhanced Response Generator output
     # -------------------------------------------------------------------------
-    reranked_docs: List[dict]
+    reranked_docs: list[dict]
     evidence_summary: str
-    top_results: List[dict]
+    top_results: list[dict]
     response: str
-    sources: List[dict]
+    sources: list[dict]
 
     # -------------------------------------------------------------------------
     # Agent 3: Verification Node output
     # -------------------------------------------------------------------------
-    verification_status: Optional[str]
-    verification_feedback: Optional[str]
+    verification_status: str | None
+    verification_feedback: str | None
 
     # -------------------------------------------------------------------------
     # LangGraph message history (auto-annotated for automatic reduction)
     # -------------------------------------------------------------------------
-    messages: add_messages  # type: ignore
+    messages: Annotated[list, add_messages]
 
 
 class ResearchState(BaseAgentState):
@@ -85,9 +86,9 @@ class ResearchState(BaseAgentState):
     """
 
     # Research-specific fields
-    research_methodology: Optional[str] = None
-    cited_works: Optional[List[str]] = None
-    limitations: Optional[List[str]] = None
+    research_methodology: NotRequired[str | None]
+    cited_works: NotRequired[list[str] | None]
+    limitations: NotRequired[list[str] | None]
 
 
 class LegacyClaimState(BaseAgentState):
@@ -97,6 +98,6 @@ class LegacyClaimState(BaseAgentState):
     """
 
     # Claim-specific fields
-    claim_verdict: Optional[str] = None
-    fact_check_url: Optional[str] = None
-    top_claims: Optional[List[dict]] = None  # Deprecated: Use top_results instead
+    claim_verdict: NotRequired[str | None]
+    fact_check_url: NotRequired[str | None]
+    top_claims: NotRequired[list[dict] | None]  # Deprecated: Use top_results instead

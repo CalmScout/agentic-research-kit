@@ -1,21 +1,21 @@
 """Tool for triggering background deep-dive research into entities."""
 
-from typing import Any, Dict, Optional
 from pathlib import Path
+from typing import Any
 
-from src.agents.tools.base import Tool
 from src.agents.research_tasks import get_research_task_manager
+from src.agents.tools.base import Tool
 
 
 class EntityDeepDiveTool(Tool):
     """
     Tool that triggers a background research task for a specific entity.
-    
+
     Useful when the agent identifies an important entity that needs more
     thorough research than a single retrieval turn allows.
     """
 
-    def __init__(self, workspace: Optional[Path] = None):
+    def __init__(self, workspace: Path | None = None):
         self.workspace = workspace
 
     @property
@@ -35,31 +35,38 @@ class EntityDeepDiveTool(Tool):
             "type": "object",
             "properties": {
                 "entity": {
-                    "type": "string", 
-                    "description": "The name of the entity (person, org, concept) to research."
+                    "type": "string",
+                    "description": "The name of the entity (person, org, concept) to research.",
                 },
                 "focus_area": {
-                    "type": "string", 
-                    "description": "Optional specific aspect to focus on (e.g., 'financial history', 'political ties')."
-                }
+                    "type": "string",
+                    "description": "Optional specific aspect to focus on (e.g., 'financial history', 'political ties').",
+                },
             },
-            "required": ["entity"]
+            "required": ["entity"],
         }
 
-    async def execute(self, entity: str, focus_area: Optional[str] = None, **kwargs: Any) -> str:
-        manager = get_research_task_manager(self.workspace)
-        
+    async def execute(self, **kwargs: Any) -> str:
+        entity = kwargs.get("entity", "")
+        if not entity:
+            return "Error: Missing required parameter 'entity'"
+        focus_area = kwargs.get("focus_area")
+
+        # Handle None workspace by using a default or letting the manager handle it
+        workspace_path = self.workspace if self.workspace is not None else Path("./workspace")
+        manager = get_research_task_manager(workspace_path)
+
         description = f"Perform a deep-dive research into '{entity}'."
         if focus_area:
             description += f" Focus particularly on {focus_area}."
-            
+
         task_id = manager.create_task(
-            description=description,
-            metadata={"entity": entity, "focus_area": focus_area}
+            description=description, metadata={"entity": entity, "focus_area": focus_area}
         )
-        
+
         # Start the task in background
         import asyncio
+
         asyncio.create_task(manager.start_task(task_id))
-        
+
         return f"Started background deep-dive for '{entity}' (Task ID: {task_id}). Findings will be distilled into RESEARCH_MEMORY.md once complete."

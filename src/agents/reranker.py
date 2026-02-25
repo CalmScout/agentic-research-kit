@@ -5,9 +5,7 @@ Can be skipped if time-constrained (fallback: simple score-based ranking).
 """
 
 import logging
-from typing import List, Dict, Any, Optional
-
-import numpy as np
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -53,9 +51,7 @@ class Qwen3VLReranker:
             # TODO: Implement actual model loading
             # For now, we'll use a simpler approach:
             # Just re-sort based on existing scores
-            logger.warning(
-                "Reranker model loading not implemented, using score-based fallback"
-            )
+            logger.warning("Reranker model loading not implemented, using score-based fallback")
             self._initialized = True
         except Exception as e:
             logger.error(f"Failed to load reranker: {e}")
@@ -65,9 +61,9 @@ class Qwen3VLReranker:
     def rerank(
         self,
         query: str,
-        documents: List[Dict[str, Any]],
-        top_k: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+        documents: list[dict[str, Any]],
+        top_k: int | None = None,
+    ) -> list[dict[str, Any]]:
         """Rerank documents based on query relevance.
 
         Args:
@@ -116,9 +112,9 @@ class Qwen3VLReranker:
     def rerank_with_scores(
         self,
         query: str,
-        documents: List[Dict[str, Any]],
-        top_k: Optional[int] = None,
-    ) -> tuple[List[Dict[str, Any]], List[float]]:
+        documents: list[dict[str, Any]],
+        top_k: int | None = None,
+    ) -> tuple[list[dict[str, Any]], list[float]]:
         """Rerank documents and return both docs and scores.
 
         Args:
@@ -138,7 +134,7 @@ class Qwen3VLReranker:
 
 
 # Singleton instance
-_reranker: Optional[Qwen3VLReranker] = None
+_reranker: Qwen3VLReranker | None = None
 
 
 def get_reranker() -> Qwen3VLReranker:

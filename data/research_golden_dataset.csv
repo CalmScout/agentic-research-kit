@@ -1,0 +1,11 @@
+unverified_claim,reviewed_claim,similarity
+"What is the core architecture described in the Transformers paper?","The core architecture is the Transformer which dispenses with recurrence and convolutions and instead relies entirely on an attention mechanism.",1
+"What are the two main components of the Transformer architecture?","The Transformer architecture consists of an encoder and a decoder.",1
+"What is Scaled Dot-Product Attention?","Scaled Dot-Product Attention is an attention mechanism that computes the dot products of the query with all keys, divides each by the square root of the dimension of the keys, and applies a softmax function to obtain the weights on the values.",1
+"What is Multi-Head Attention?","Multi-Head Attention allows the model to jointly attend to information from different representation subspaces at different positions by performing attention in parallel.",1
+"How does the Transformer handle positional information?","Since the Transformer contains no recurrence and no convolution, it uses positional encodings added to the input embeddings at the bottoms of the encoder and decoder stacks.",1
+"What is the complexity per layer for Self-Attention?","The complexity per layer for Self-Attention is O(n^2 * d) where n is the sequence length and d is the representation dimension.",1
+"What was the primary goal of developing the Transformer?","The primary goal was to allow for more parallelization during training and reach a new state of the art in translation quality.",1
+"Which translation tasks were used to evaluate the Transformer?","The Transformer was evaluated on the WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks.",1
+"What is the purpose of the feed-forward networks in each layer?","Each layer in the encoder and decoder contains a fully connected feed-forward network which is applied to each position separately and identically.",1
+"What advantage does self-attention have over recurrent layers for long dependencies?","Self-attention connects all positions with a constant number of sequentially executed operations, whereas recurrent layers require O(n) sequential operations.",1

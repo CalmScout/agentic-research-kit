@@ -42,11 +42,12 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
 - [x] **Configuration Integration**: Added `mcp_servers` to global settings.
 
 ### Phase 2: Performance & Integrity (Immediate Focus)
-- [ ] **High-Performance Storage Backend**:
-    - Migrate from JSON-based storage to a high-performance local database (e.g., **LanceDB** or **DuckDB**).
-    - This will resolve the "slowness" issue by using binary storage and optimized indexing for vector and text search.
-- [ ] **Verification Node (Critique)**:
-    - Implement a "Critique" node in the LangGraph workflow that validates generated claims against retrieved evidence before showing the final answer.
+- [x] **High-Performance Storage Backend**:
+    - [x] Migrated from JSON-based storage to **LanceDB**.
+    - [x] Implemented `LanceDBKVStorage`, `LanceDBDocStatusStorage`, and `LanceDBVectorDBStorage`.
+    - [x] This resolves the "slowness" issue by using binary storage and optimized indexing for vector and text search.
+- [x] **Verification Node (Critique)**:
+    - [x] Implemented a "Critique" node in the LangGraph workflow that validates generated claims against retrieved evidence before showing the final answer.
 - [x] **Semantic Memory Store**:
     - Migrate `RESEARCH_MEMORY.md` to the local vector store to support retrieval from thousands of past findings without context window limits.
 
@@ -56,6 +57,17 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
 - [x] **Proactive Research**:
     - Implemented `ResearchTaskManager` for background task execution.
     - Added `EntityDeepDiveTool` to trigger asynchronous research into detected entities.
+
+### Phase 3.5: Hardening & Evaluation (Complete)
+- [x] **Test Suite Repair & Modernization**:
+    - Fixed broken unit tests and resolved deprecation/runtime warnings.
+    - Achieved >90% coverage on the core 3-agent LangGraph workflow components.
+- [x] **Observability Deepening**:
+    - Integrated **Loguru** across all core agents and storage components.
+    - Added **OpenTelemetry/Arize Phoenix** tracing to ToolRegistry and Embedding generation for deep visibility.
+- [x] **RAGAS Evaluation Pipeline**:
+    - Established a "Golden Dataset" in `data/research_golden_dataset.csv`.
+    - Implemented `RAGASEvaluator` and `run_ragas_eval.py` script.
 
 ### Phase 4: Interface & Asynchronicity (Planned)
 - [ ] **Message Bus Integration**:

@@ -81,6 +81,7 @@ async def test_enhanced_retriever_web_fallback():
     with patch("src.agents.enhanced_retriever.get_settings", return_value=mock_settings):
         with patch("src.agents.enhanced_retriever.ToolRegistry") as mock_registry_class:
             mock_registry = mock_registry_class.return_value
+            mock_registry.close = AsyncMock() # Fix: make close an AsyncMock
             
             # Entity extractor returns empty list
             mock_registry.execute.side_effect = [

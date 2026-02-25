@@ -93,11 +93,11 @@ class LightRAGHTTPClient:
         # Set environment variables
         env = {
             "LIGHTRAG_WORKING_DIR": self.settings.rag_working_dir,
-            # Use sync storage backends to avoid async issues in the server
-            "LIGHTRAG_KV_STORAGE": "JsonKVStorage",
-            "LIGHTRAG_VECTOR_STORAGE": "NanoVectorDBStorage",
+            # Use high-performance LanceDB storage backends
+            "LIGHTRAG_KV_STORAGE": "LanceDBKVStorage",
+            "LIGHTRAG_VECTOR_STORAGE": "LanceDBVectorDBStorage",
             "LIGHTRAG_GRAPH_STORAGE": "NetworkXStorage",
-            "LIGHTRAG_DOC_STATUS_STORAGE": "JsonDocStatusStorage",
+            "LIGHTRAG_DOC_STATUS_STORAGE": "LanceDBDocStatusStorage",
             # Set embedding dimension to match Qwen3-VL-Embedding-2B (2048)
             "EMBEDDING_DIM": "2048",
         }

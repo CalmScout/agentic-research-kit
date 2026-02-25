@@ -4,10 +4,8 @@ Provides singleton access to Qwen3-VL-Embedding-2B for efficient memory usage.
 Reuses the existing Qwen3VLEmbedding from src.utils.vision_embedding.
 """
 
-import logging
 from typing import List, Union, Optional
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 # Singleton instance for memory efficiency
@@ -64,6 +62,14 @@ class Qwen3VLEmbeddingWrapper:
             List[float]: 2048-dimensional embedding vector
         """
         try:
+            from opentelemetry import trace
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("embed_text") as span:
+                span.set_attribute("text_length", len(text))
+                embedding = self.model.embed_text(text)
+                logger.debug(f"Generated text embedding (dim={len(embedding)})")
+                return embedding
+        except ImportError:
             embedding = self.model.embed_text(text)
             logger.debug(f"Generated text embedding (dim={len(embedding)})")
             return embedding
@@ -81,6 +87,14 @@ class Qwen3VLEmbeddingWrapper:
             List[float]: 2048-dimensional embedding vector
         """
         try:
+            from opentelemetry import trace
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("embed_image") as span:
+                span.set_attribute("image_path", image_path)
+                embedding = self.model.embed_image(image_path)
+                logger.debug(f"Generated image embedding (dim={len(embedding)})")
+                return embedding
+        except ImportError:
             embedding = self.model.embed_image(image_path)
             logger.debug(f"Generated image embedding (dim={len(embedding)})")
             return embedding
@@ -101,6 +115,18 @@ class Qwen3VLEmbeddingWrapper:
             List[float]: 2048-dimensional embedding vector
         """
         try:
+            from opentelemetry import trace
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("embed_multimodal") as span:
+                span.set_attribute("text_length", len(text))
+                if image_path:
+                    span.set_attribute("image_path", image_path)
+                    embedding = self.model.embed_multimodal(text, image_path)
+                    logger.debug(f"Generated multimodal embedding (dim={len(embedding)})")
+                else:
+                    embedding = self.embed_text(text)
+                return embedding
+        except ImportError:
             if image_path:
                 embedding = self.model.embed_multimodal(text, image_path)
                 logger.debug(f"Generated multimodal embedding (dim={len(embedding)})")
@@ -121,6 +147,14 @@ class Qwen3VLEmbeddingWrapper:
             List[List[float]]: List of embedding vectors
         """
         try:
+            from opentelemetry import trace
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("embed_batch") as span:
+                span.set_attribute("batch_size", len(texts))
+                embeddings = [self.embed_text(text) for text in texts]
+                logger.debug(f"Generated batch embeddings (count={len(texts)})")
+                return embeddings
+        except ImportError:
             embeddings = [self.embed_text(text) for text in texts]
             logger.debug(f"Generated batch embeddings (count={len(texts)})")
             return embeddings

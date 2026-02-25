@@ -14,6 +14,7 @@ class BaseAgentState(TypedDict):
     This state flows through all 2 agents:
     1. Enhanced Retriever → Extracts entities, generates embeddings, and retrieves documents
     2. Enhanced Response Generator → Reranks, synthesizes evidence, and generates response
+    3. Verification Node → Validates generated response against retrieved evidence
 
     The state is designed to be domain-agnostic. For domain-specific use cases,
     create a subclass that adds additional fields.
@@ -33,6 +34,8 @@ class BaseAgentState(TypedDict):
         top_results: Top K most relevant results
         response: Final generated response
         sources: Source documents for citation
+        verification_status: Status from verification node ("verified" or "corrected")
+        verification_feedback: Feedback from the critique LLM
         messages: LangGraph message history (auto-annotated)
     """
 
@@ -62,6 +65,12 @@ class BaseAgentState(TypedDict):
     top_results: List[dict]
     response: str
     sources: List[dict]
+
+    # -------------------------------------------------------------------------
+    # Agent 3: Verification Node output
+    # -------------------------------------------------------------------------
+    verification_status: Optional[str]
+    verification_feedback: Optional[str]
 
     # -------------------------------------------------------------------------
     # LangGraph message history (auto-annotated for automatic reduction)

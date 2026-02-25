@@ -1,8 +1,9 @@
 """LangGraph workflow orchestration for multi-agent RAG system.
 
-Orchestrates 2 agents in sequence:
+Orchestrates 3 agents in sequence:
 1. Enhanced Retriever (Query Analyzer + Retriever) → Extract entities, embeddings, and retrieve documents
 2. Enhanced Response Generator (Evidence Aggregator + Response Generator) → Rerank, synthesize evidence, and generate response
+3. Verification Node (Critique Agent) → Validates generated response against retrieved evidence to prevent hallucinations
 
 This simplified workflow reduces complexity while maintaining functionality.
 Follows LangGraph best practices from the agents-from-scratch course.
@@ -17,6 +18,7 @@ from langgraph.graph import StateGraph, START, END
 from src.agents.base_state import BaseAgentState
 from src.agents.enhanced_retriever import enhanced_retriever_agent
 from src.agents.enhanced_response_generator import enhanced_response_generator_agent
+from src.agents.verification import verification_agent
 from src.agents.memory import MemoryStore
 
 from loguru import logger
@@ -84,7 +86,7 @@ _initialize_phoenix()
 
 
 def create_multi_agent_workflow():
-    """Create the simplified 2-agent LangGraph workflow.
+    """Create the simplified 3-agent LangGraph workflow.
 
     Returns:
         Compiled workflow ready for invocation
@@ -93,7 +95,7 @@ def create_multi_agent_workflow():
         >>> workflow = create_multi_agent_workflow()
         >>> result = await workflow.ainvoke({"query": "Is climate change real?"})
     """
-    logger.info("Creating simplified 2-agent workflow...")
+    logger.info("Creating simplified 3-agent workflow...")
 
     # Initialize state graph
     workflow = StateGraph(BaseAgentState)
@@ -103,15 +105,17 @@ def create_multi_agent_workflow():
     # -----------------------------------------------------------------
     workflow.add_node("enhanced_retriever", enhanced_retriever_agent)
     workflow.add_node("enhanced_response_generator", enhanced_response_generator_agent)
+    workflow.add_node("verification_agent", verification_agent)
 
-    logger.info("✓ Added 2 agent nodes")
+    logger.info("✓ Added 3 agent nodes")
 
     # -----------------------------------------------------------------
     # Define workflow edges (sequential flow)
     # -----------------------------------------------------------------
     workflow.add_edge(START, "enhanced_retriever")
     workflow.add_edge("enhanced_retriever", "enhanced_response_generator")
-    workflow.add_edge("enhanced_response_generator", END)
+    workflow.add_edge("enhanced_response_generator", "verification_agent")
+    workflow.add_edge("verification_agent", END)
 
     logger.info("✓ Configured workflow edges")
 
@@ -132,7 +136,7 @@ async def query_with_agents(
     debug: bool = False,
     workspace: Path = None
 ) -> Dict[str, Any]:
-    """Execute simplified 2-agent query pipeline.
+    """Execute simplified multi-agent query pipeline.
 
     This is the main entry point for querying the system.
 
@@ -192,6 +196,8 @@ async def query_with_agents(
             "top_results": [],
             "response": "",
             "sources": [],
+            "verification_status": None,
+            "verification_feedback": None,
             "messages": [],  # LangGraph message history
         }
 

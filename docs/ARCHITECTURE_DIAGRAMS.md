@@ -25,10 +25,11 @@ flowchart TB
         Gateway[Gateway<br/>Telegram Bot]
     end
 
-    subgraph "2-Agent Orchestration Layer"
-        LangGraph[LangGraph Workflow<br/>2-Agent Sequential Flow]
+    subgraph "3-Agent Orchestration Layer"
+        LangGraph[LangGraph Workflow<br/>3-Agent Sequential Flow]
         A1[Agent 1: Enhanced Retriever<br/>Tool Registry]
         A2[Agent 2: Enhanced Response Generator<br/>Tool Registry]
+        A3[Agent 3: Verification Node<br/>Critique Agent]
     end
 
     subgraph "Tool Layer"
@@ -45,9 +46,9 @@ flowchart TB
     end
 
     subgraph "Data Layer"
-        VectorDB[NanoVectorDB<br/>Local Vector Store]
+        LanceDB[(LanceDB<br/>High-Perf Storage)]
         KG[Knowledge Graph<br/>LightRAG]
-        Memory[Memory Store<br/>Markdown-based Context]
+        Memory[Semantic Memory<br/>LanceDB Store]
     end
 
     subgraph "Observability Layer"
@@ -64,7 +65,8 @@ flowchart TB
     %% Orchestration Flow
     LangGraph --> A1
     A1 --> A2
-    A2 --> LangGraph
+    A2 --> A3
+    A3 --> LangGraph
     LangGraph --> CLI
     LangGraph --> API
 
@@ -78,9 +80,10 @@ flowchart TB
     T1 --> LLM_Local
     T4 --> LLM_Local
     A2 --> LLM_API
+    A3 --> LLM_Local
 
     %% Tools to Data
-    T2 --> VectorDB
+    T2 --> LanceDB
     T2 --> KG
 
     %% Memory Integration
@@ -90,19 +93,22 @@ flowchart TB
     %% Observability
     A1 --> Phoenix
     A2 --> Phoenix
+    A3 --> Phoenix
     A1 --> Loguru
     A2 --> Loguru
+    A3 --> Loguru
 
     %% Styling
     style LangGraph fill:#4A90E2,stroke:#2C5282,stroke-width:3px
     style Phoenix fill:#FF6B6B,stroke:#C92A2A,stroke-width:2px
     style Loguru fill:#FFA726,stroke:#F57C00,stroke-width:2px
     style RAGAS fill:#50E3C2,stroke:#2E8B57,stroke-width:2px
-    style VectorDB fill:#FFE0B2,stroke:#FF9800,stroke-width:2px
+    style LanceDB fill:#FFE0B2,stroke:#FF9800,stroke-width:2px
     style KG fill:#C8E6C9,stroke:#4CAF50,stroke-width:2px
     style Memory fill:#BA68C8,stroke:#7B1FA2,stroke-width:2px
     style A1 fill:#64B5F6,stroke:#1976D2,stroke-width:2px
     style A2 fill:#64B5F6,stroke:#1976D2,stroke-width:2px
+    style A3 fill:#64B5F6,stroke:#1976D2,stroke-width:2px
 ```
 
 ### Key Components Explained
@@ -112,20 +118,21 @@ flowchart TB
 - **API**: REST API for programmatic access and web integration.
 - **Gateway**: Asynchronous communication channels (e.g., Telegram).
 
-**2-Agent Orchestration**:
-- **LangGraph**: Orchestrates the 2-agent sequential workflow with state management.
+**3-Agent Orchestration**:
+- **LangGraph**: Orchestrates the 3-agent sequential workflow with state management.
 - **Agent 1 (Enhanced Retriever)**: Query analysis, entity extraction, and multi-source retrieval.
-- **Agent 2 (Enhanced Response Generator)**: Reranking, evidence synthesis, and citation-rich response generation.
+- **Agent 2 (Enhanced Response Generator)**: Reranking, evidence synthesis, and citation-rich draft generation.
+- **Agent 3 (Verification Node)**: Fact-checking draft responses against sources to prevent hallucinations.
 
 **Tool Layer**:
 - **EntityExtractorTool**: Extracts key entities using local lightweight LLMs.
-- **HybridRetrieverTool**: Performs Vector + BM25 + KG retrieval via thread-isolated LightRAG.
+- **HybridRetrieverTool**: Performs Vector + BM25 + KG retrieval via thread-isolated LightRAG backed by LanceDB.
 - **WebSearch/Fetch**: Augments local knowledge with real-time web data (Brave Search).
 - **RerankerTool**: Improves precision by re-ordering retrieved documents.
 
 **Model Layer**:
 - **Embeddings**: Qwen3-VL-Embedding-2B for unified text/image vector space.
-- **Local LLMs**: Qwen2.5-1.5B (extraction) and Qwen3-8B (fallback generation).
+- **Local LLMs**: Qwen2.5-1.5B (extraction & fact-checking) and Qwen3-8B (fallback generation).
 - **API LLMs**: DeepSeek-R1 or GPT-4 for high-quality reasoning and synthesis.
 
 ---
@@ -141,10 +148,11 @@ sequenceDiagram
     participant A1 as Enhanced Retriever
     participant Tools as Tool Registry
     participant A2 as Enhanced Response Generator
+    participant A3 as Verification Agent
     participant Mem as Memory Store
 
     U->>LG: query_with_agents(query)
-    LG->>Mem: Load research context
+    LG->>Mem: Load research context (LanceDB)
     Mem-->>LG: context
 
     LG->>A1: Execute (query, context)
@@ -152,7 +160,7 @@ sequenceDiagram
     A1->>Tools: execute("entity_extractor")
     Tools-->>A1: entities
     A1->>Tools: execute("hybrid_retriever")
-    Tools-->>A1: local_docs
+    Tools-->>A1: local_docs (LanceDB)
     alt insufficient results
         A1->>Tools: execute("web_search")
         Tools-->>A1: web_docs
@@ -165,11 +173,18 @@ sequenceDiagram
     A2->>Tools: execute("reranker")
     Tools-->>A2: top_docs
     A2->>A2: Synthesize evidence
-    A2->>A2: Generate response with citations
-    A2-->>LG: final_response, sources
+    A2->>A2: Generate draft response
+    A2-->>LG: draft_response, sources
     deactivate A2
 
-    LG->>Mem: Log query to history
+    LG->>A3: Execute (query, sources, draft)
+    activate A3
+    A3->>A3: Fact-check response against sources
+    A3->>A3: Correct hallucinations
+    A3-->>LG: verified_response, feedback
+    deactivate A3
+
+    LG->>Mem: Log query to history (LanceDB)
     LG-->>U: result
 ```
 
@@ -200,9 +215,8 @@ flowchart LR
     end
 
     subgraph "Persistent Storage"
-        VDB[(NanoVectorDB<br/>Vector Store)]
+        LanceDB[(LanceDB<br/>Vector & Doc Store)]
         KG[(NetworkX<br/>Knowledge Graph)]
-        DocStore[(JsonKVStorage<br/>Document Store)]
     end
 
     %% Connections
@@ -214,13 +228,12 @@ flowchart LR
     Chunker --> Embed
     
     LLM --> KG
-    Embed --> VDB
-    Parser --> DocStore
+    Embed --> LanceDB
+    Parser --> LanceDB
 
     %% Styling
-    style VDB fill:#FFE0B2,stroke:#FF9800,stroke-width:2px
+    style LanceDB fill:#FFE0B2,stroke:#FF9800,stroke-width:2px
     style KG fill:#C8E6C9,stroke:#4CAF50,stroke-width:2px
-    style DocStore fill:#E3F2FD,stroke:#2196F3,stroke-width:2px
 ```
 
 ---
@@ -260,4 +273,4 @@ flowchart TB
 
 ---
 
-**Last Updated**: 2026-02-23 (Updated for Agentic Research Kit focus)
+**Last Updated**: 2026-02-25 (Updated for LanceDB migration and 3-agent verification workflow)

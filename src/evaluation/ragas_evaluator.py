@@ -296,9 +296,12 @@ class RAGASEvaluator:
             ) from e
 
         # Map metric names to RAGAS metrics
+        from langchain_huggingface import HuggingFaceEmbeddings
+        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+
         metric_map = {
             "faithfulness": Faithfulness(llm=self.llm),
-            "answer_relevancy": AnswerRelevancy(llm=self.llm),
+            "answer_relevancy": AnswerRelevancy(llm=self.llm, embeddings=embeddings),
             "context_precision": ContextPrecision(llm=self.llm),
             "context_recall": ContextRecall(llm=self.llm),
         }

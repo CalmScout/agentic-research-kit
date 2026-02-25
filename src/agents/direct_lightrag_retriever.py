@@ -11,9 +11,46 @@ from pathlib import Path
 import numpy as np
 
 from lightrag import LightRAG, QueryParam
-from lightrag.utils import EmbeddingFunc
+from lightrag.utils import EmbeddingFunc, lazy_external_import
+from lightrag.kg import STORAGES, STORAGE_IMPLEMENTATIONS
 
 from src.utils.vision_embedding import Qwen3VLEmbedding, get_qwen2_llm
+from src.agents.lancedb_storage import LanceDBKVStorage, LanceDBDocStatusStorage, LanceDBVectorDBStorage
+
+# Register custom LanceDB storages names
+STORAGES["LanceDBKVStorage"] = "LanceDBKVStorage"
+STORAGES["LanceDBDocStatusStorage"] = "LanceDBDocStatusStorage"
+STORAGES["LanceDBVectorDBStorage"] = "LanceDBVectorDBStorage"
+
+# Add to allowed implementations to bypass validation errors
+STORAGE_IMPLEMENTATIONS["KV_STORAGE"]["implementations"].append("LanceDBKVStorage")
+STORAGE_IMPLEMENTATIONS["DOC_STATUS_STORAGE"]["implementations"].append("LanceDBDocStatusStorage")
+STORAGE_IMPLEMENTATIONS["VECTOR_STORAGE"]["implementations"].append("LanceDBVectorDBStorage")
+
+# Monkey-patch LightRAG to support our custom classes directly
+_original_get_storage_class = LightRAG._get_storage_class
+
+def _patched_get_storage_class(self, storage_name: str) -> Callable[..., Any]:
+    if storage_name == "LanceDBKVStorage":
+        return LanceDBKVStorage
+    elif storage_name == "LanceDBDocStatusStorage":
+        return LanceDBDocStatusStorage
+    elif storage_name == "LanceDBVectorDBStorage":
+        return LanceDBVectorDBStorage
+    
+    # Handle standard LightRAG storages or others
+    try:
+        return _original_get_storage_class(self, storage_name)
+    except Exception:
+        # Fallback for dynamic import if not handled by original
+        if storage_name in STORAGES:
+            import_path = STORAGES[storage_name]
+            if not isinstance(import_path, str):
+                return import_path
+            return lazy_external_import(import_path, storage_name)
+        raise
+
+LightRAG._get_storage_class = _patched_get_storage_class
 
 logger = logging.getLogger(__name__)
 
@@ -147,6 +184,9 @@ class DirectLightRAGRetriever:
                 working_dir=str(self.working_dir),
                 llm_model_func=llm_model_func,
                 embedding_func=embedding_func,
+                kv_storage="LanceDBKVStorage",
+                doc_status_storage="LanceDBDocStatusStorage",
+                vector_storage="LanceDBVectorDBStorage",
             )
 
             logger.info("✓ LightRAG initialized successfully")

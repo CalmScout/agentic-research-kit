@@ -49,7 +49,7 @@ class MemoryStore:
         self.table_name = "research_memory"
 
         # Auto-reindex if table is missing but data exists
-        if self.table_name not in self.db.table_names() and self.memory_file.exists():
+        if self.table_name not in self.db.list_tables() and self.memory_file.exists():
             logger.info("Initializing semantic memory table from existing markdown...")
             self._reindex_all_findings(self.read_long_term())
 
@@ -84,7 +84,7 @@ class MemoryStore:
     def _reindex_all_findings(self, content: str) -> None:
         """Parse RESEARCH_MEMORY.md and re-index into LanceDB."""
         try:
-            if self.table_name in self.db.table_names():
+            if self.table_name in self.db.list_tables():
                 self.db.drop_table(self.table_name)
                 
             sections = content.split("## Finding")
@@ -136,7 +136,7 @@ class MemoryStore:
             from src.agents.embeddings import embedder
             vector = embedder.embed_text(finding)
             data = [{"vector": vector, "text": finding, "timestamp": timestamp}]
-            if self.table_name in self.db.table_names():
+            if self.table_name in self.db.list_tables():
                 tbl = self.db.open_table(self.table_name)
                 tbl.add(data)
             else:
@@ -213,7 +213,7 @@ class MemoryStore:
         Returns:
             str: Research context in markdown format
         """
-        if not query or self.table_name not in self.db.table_names():
+        if not query or self.table_name not in self.db.list_tables():
             # Fallback to simple truncation
             long_term = self.read_long_term()
 

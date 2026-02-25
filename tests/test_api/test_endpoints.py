@@ -23,48 +23,34 @@ def test_root_endpoint(client):
     assert "version" in data
     assert "architecture" in data
     assert "endpoints" in data
-    assert data["name"] == "MultiModal Agentic RAG API"
+    assert data["name"] == "Agentic Research Kit (ARK) API"
+    assert data["architecture"] == "3-agent LangGraph"
 
 
 def test_health_endpoint(client):
     """Test GET /health endpoint returns health status."""
-    response = client.get("/health")
+    with patch("src.api.main.get_doc_count", new_callable=AsyncMock) as mock_count:
+        mock_count.return_value = 0
+        response = client.get("/health")
 
-    assert response.status_code == 200
-    data = response.json()
-    assert "status" in data
-    assert "architecture" in data
-    assert "ingested_docs" in data
-    assert data["status"] == "healthy"
-    assert data["architecture"] == "2-agent LangGraph"
+        assert response.status_code == 200
+        data = response.json()
+        assert "status" in data
+        assert "architecture" in data
+        assert "ingested_docs" in data
+        assert data["status"] == "healthy"
+        assert data["architecture"] == "3-agent LangGraph"
 
 
-def test_health_endpoint_with_docs(client, temp_dir):
+def test_health_endpoint_with_docs(client):
     """Test health endpoint with ingested documents."""
-    # Create mock doc status file in rag_storage directory
-    import json
-    rag_storage_dir = temp_dir / "rag_storage"
-    rag_storage_dir.mkdir()
-    doc_status_file = rag_storage_dir / "kv_store_doc_status.json"
-    mock_docs = {
-        "doc1": {"status": "ingested"},
-        "doc2": {"status": "ingested"},
-        "doc3": {"status": "ingested"}
-    }
-    doc_status_file.write_text(json.dumps(mock_docs))
-
-    # Change to temp_dir to pick up the mock file
-    import os
-    original_cwd = os.getcwd()
-    try:
-        os.chdir(temp_dir)
+    with patch("src.api.main.get_doc_count", new_callable=AsyncMock) as mock_count:
+        mock_count.return_value = 3
         response = client.get("/health")
 
         assert response.status_code == 200
         data = response.json()
         assert data["ingested_docs"] == 3
-    finally:
-        os.chdir(original_cwd)
 
 
 def test_query_endpoint_success(client):
@@ -74,7 +60,6 @@ def test_query_endpoint_success(client):
         mock_query.return_value = {
             "query": "Is climate change real?",
             "response": "Yes, climate change is real.",
-            "confidence": 0.9,
             "sources": [
                 {
                     "text": "Climate change is real.",
@@ -95,11 +80,9 @@ def test_query_endpoint_success(client):
         data = response.json()
         assert data["query"] == "Is climate change real?"
         assert "response" in data
-        assert "confidence" in data
         assert "sources" in data
         assert "entities" in data
         assert "retrieved_count" in data
-        assert 0.0 <= data["confidence"] <= 1.0
 
 
 def test_query_endpoint_validation_empty_query(client):
@@ -130,7 +113,6 @@ def test_query_endpoint_response_format(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [],
             "entities": [],
             "retrieved_count": 0
@@ -147,7 +129,6 @@ def test_query_endpoint_response_format(client):
         # Verify all fields exist and have correct types
         assert isinstance(data["query"], str)
         assert isinstance(data["response"], str)
-        assert isinstance(data["confidence"], (int, float))
         assert isinstance(data["sources"], list)
         assert isinstance(data["entities"], list)
         assert isinstance(data["retrieved_count"], int)
@@ -159,7 +140,6 @@ def test_query_endpoint_with_session(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [],
             "entities": [],
             "retrieved_count": 0
@@ -182,10 +162,9 @@ def test_query_endpoint_with_debug(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [],
             "entities": [],
-            "retrieved_count": 0
+            "retrieved_docs": []
         }
 
         response = client.post(
@@ -222,7 +201,6 @@ def test_query_endpoint_long_sources_truncated(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [{"text": long_source_text, "url": "http://example.com"}],
             "entities": [],
             "retrieved_count": 1
@@ -241,19 +219,21 @@ def test_query_endpoint_long_sources_truncated(client):
 
 def test_stats_endpoint(client):
     """Test GET /stats endpoint returns system statistics."""
-    response = client.get("/stats")
+    with patch("src.api.main.get_doc_count", new_callable=AsyncMock) as mock_count:
+        mock_count.return_value = 0
+        response = client.get("/stats")
 
-    assert response.status_code == 200
-    data = response.json()
-    assert "ingested_docs" in data
-    assert "architecture" in data
-    assert "agents" in data
-    assert isinstance(data["agents"], list)
-    assert len(data["agents"]) == 2
+        assert response.status_code == 200
+        data = response.json()
+        assert "ingested_docs" in data
+        assert "architecture" in data
+        assert "agents" in data
+        assert isinstance(data["agents"], list)
+        assert len(data["agents"]) == 3
 
 
 def test_stats_endpoint_agents_list(client):
-    """Test that stats endpoint lists all 2 agents."""
+    """Test that stats endpoint lists all 3 agents."""
     response = client.get("/stats")
 
     assert response.status_code == 200
@@ -261,7 +241,8 @@ def test_stats_endpoint_agents_list(client):
 
     expected_agents = [
         "Enhanced Retriever",
-        "Enhanced Response Generator"
+        "Enhanced Response Generator",
+        "Verification Agent"
     ]
 
     for agent in expected_agents:
@@ -274,7 +255,6 @@ def test_query_endpoint_sources_with_url_and_score(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [
                 {
                     "text": "Test source",
@@ -304,7 +284,6 @@ def test_query_endpoint_multiple_sources(client):
         mock_query.return_value = {
             "query": "test",
             "response": "test response",
-            "confidence": 0.8,
             "sources": [
                 {"text": f"Source {i}", "url": f"http://example.com/{i}", "score": 0.9 - i * 0.1}
                 for i in range(5)

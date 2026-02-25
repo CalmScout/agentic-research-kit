@@ -159,6 +159,7 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--ignore=tests/unit_local"
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"

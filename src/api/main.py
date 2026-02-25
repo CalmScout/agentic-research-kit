@@ -4,10 +4,14 @@ Provides REST API endpoints for querying the research system.
 """
 
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional
 
 from fastapi import FastAPI, HTTPException, status
 from pydantic import BaseModel, Field
+
+from src.agents.lancedb_storage import LanceDBDocStatusStorage
+from lightrag.kg.shared_storage import initialize_share_data
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -65,23 +69,26 @@ class HealthResponse(BaseModel):
 # -------------------------------------------------------------------------
 
 
-def get_doc_count() -> int:
-    """Get number of ingested documents from LightRAG storage.
+async def get_doc_count() -> int:
+    """Get number of ingested documents from LanceDB storage.
 
     Returns:
         int: Number of documents
     """
     try:
-        import json
-        from pathlib import Path
-
-        doc_status_file = Path("./rag_storage/kv_store_doc_status.json")
-        if doc_status_file.exists():
-            with open(doc_status_file) as f:
-                data = json.load(f)
-            return len(data)
-        return 0
-    except Exception:
+        initialize_share_data()
+        storage = LanceDBDocStatusStorage(
+            namespace="doc_status",
+            workspace="default",
+            global_config={"working_dir": "./rag_storage"},
+            embedding_func=None # Not needed for status count
+        )
+        await storage.initialize()
+        counts = await storage.get_status_counts()
+        # Sum all statuses that indicate presence
+        return sum(counts.values())
+    except Exception as e:
+        logger.error(f"Error getting doc count: {e}")
         return 0
 
 
@@ -96,7 +103,7 @@ async def root():
     return {
         "name": "Agentic Research Kit (ARK) API",
         "version": "0.1.0",
-        "architecture": "2-agent LangGraph",
+        "architecture": "3-agent LangGraph",
         "endpoints": {
             "health": "GET /health",
             "query": "POST /query",
@@ -111,8 +118,8 @@ async def health():
     """Health check endpoint."""
     return HealthResponse(
         status="healthy",
-        architecture="2-agent LangGraph",
-        ingested_docs=get_doc_count(),
+        architecture="3-agent LangGraph",
+        ingested_docs=await get_doc_count(),
     )
 
 
@@ -183,11 +190,12 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
 async def stats():
     """Get system statistics."""
     return {
-        "ingested_docs": get_doc_count(),
-        "architecture": "2-agent LangGraph",
+        "ingested_docs": await get_doc_count(),
+        "architecture": "3-agent LangGraph",
         "agents": [
             "Enhanced Retriever",
             "Enhanced Response Generator",
+            "Verification Agent"
         ],
     }
 

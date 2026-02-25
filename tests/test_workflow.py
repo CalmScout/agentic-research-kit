@@ -56,7 +56,6 @@ async def test_workflow_end_to_end(agent_state_minimal, mock_llm, mock_embedding
                     # Verify result structure
                     assert "query" in result
                     assert "response" in result
-                    assert "confidence" in result
                     assert "sources" in result
                     assert "retrieved_count" in result
 
@@ -72,7 +71,7 @@ async def test_workflow_error_handling():
 
         # Should return error response
         assert "error" in result or "response" in result
-        assert result.get("confidence", 1.0) == 0.0
+        assert result.get("confidence") is None
 
 
 @pytest.mark.asyncio
@@ -97,8 +96,8 @@ def test_query_with_agents_sync():
     query = "test query"
 
     # Mock the async function
-    with patch("asyncio.run") as mock_run:
-        mock_run.return_value = {
+    with patch("src.agents.workflow.query_with_agents") as mock_query:
+        mock_query.return_value = {
             "query": query,
             "response": "test response",
             "confidence": 0.8,
@@ -221,7 +220,6 @@ async def test_workflow_empty_sources():
         mock_workflow.return_value.ainvoke = AsyncMock(return_value={
             "query": query,
             "response": "No relevant information found.",
-            "confidence": 0.0,
             "sources": [],
             "entities": [],
             "retrieved_docs": []

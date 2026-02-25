@@ -44,6 +44,15 @@ class MemoryStore:
         self.memory_file = self.memory_dir / "RESEARCH_MEMORY.md"
         self.history_file = self.memory_dir / "QUERY_HISTORY.md"
 
+        import lancedb
+        self.db = lancedb.connect(self.memory_dir / "lancedb")
+        self.table_name = "research_memory"
+
+        # Auto-reindex if table is missing but data exists
+        if self.table_name not in self.db.table_names() and self.memory_file.exists():
+            logger.info("Initializing semantic memory table from existing markdown...")
+            self._reindex_all_findings(self.read_long_term())
+
         logger.debug(f"Memory store initialized at: {self.memory_dir}")
 
     # -------------------------------------------------------------------------
@@ -70,6 +79,43 @@ class MemoryStore:
         """
         self.memory_file.write_text(content, encoding="utf-8")
         logger.info(f"Wrote {len(content)} chars to research memory")
+        self._reindex_all_findings(content)
+
+    def _reindex_all_findings(self, content: str) -> None:
+        """Parse RESEARCH_MEMORY.md and re-index into LanceDB."""
+        try:
+            if self.table_name in self.db.table_names():
+                self.db.drop_table(self.table_name)
+                
+            sections = content.split("## Finding")
+            data = []
+            
+            # Lazy load embedder
+            try:
+                from src.agents.embeddings import embedder
+            except ImportError:
+                logger.warning("Embedder not available. Skipping LanceDB indexing.")
+                return
+
+            for section in sections:
+                if not section.strip():
+                    continue
+                lines = section.strip().split("\n", 1)
+                text = section.strip()
+                timestamp = "Unknown"
+                if lines[0].startswith("[") and "]" in lines[0]:
+                    timestamp = lines[0].split("]")[0].strip("[")
+                    if len(lines) > 1:
+                        text = lines[1].strip()
+                
+                vector = embedder.embed_text(text)
+                data.append({"vector": vector, "text": text, "timestamp": timestamp})
+                
+            if data:
+                self.db.create_table(self.table_name, data)
+                logger.info(f"Re-indexed {len(data)} findings in LanceDB")
+        except Exception as e:
+            logger.error(f"Failed to re-index LanceDB: {e}")
 
     def append_research_finding(self, finding: str) -> None:
         """Append a research finding to long-term memory.
@@ -84,6 +130,20 @@ class MemoryStore:
             f.write(entry)
 
         logger.debug(f"Appended research finding to memory")
+        
+        # Index in LanceDB
+        try:
+            from src.agents.embeddings import embedder
+            vector = embedder.embed_text(finding)
+            data = [{"vector": vector, "text": finding, "timestamp": timestamp}]
+            if self.table_name in self.db.table_names():
+                tbl = self.db.open_table(self.table_name)
+                tbl.add(data)
+            else:
+                self.db.create_table(self.table_name, data)
+            logger.debug("Indexed new finding in LanceDB")
+        except Exception as e:
+            logger.error(f"Failed to index finding in LanceDB: {e}")
 
     # -------------------------------------------------------------------------
     # Query History
@@ -142,25 +202,51 @@ class MemoryStore:
     # Context Retrieval
     # -------------------------------------------------------------------------
 
-    def get_research_context(self, max_chars: int = 2000) -> str:
+    def get_research_context(self, query: str = None, max_chars: int = 2000, top_k: int = 5) -> str:
         """Get research context for query enhancement.
 
         Args:
+            query: User's query for semantic retrieval (if None, falls back to full text truncation)
             max_chars: Maximum characters to return from long-term memory
+            top_k: Number of most relevant findings to return (semantic mode)
 
         Returns:
             str: Research context in markdown format
         """
-        long_term = self.read_long_term()
+        if not query or self.table_name not in self.db.table_names():
+            # Fallback to simple truncation
+            long_term = self.read_long_term()
 
-        if not long_term:
-            return ""
+            if not long_term:
+                return ""
 
-        # Truncate if necessary
-        if len(long_term) > max_chars:
-            long_term = long_term[:max_chars] + "\n\n...(truncated)"
+            if len(long_term) > max_chars:
+                long_term = long_term[:max_chars] + "\n\n...(truncated)"
 
-        return f"## Research Context\n\n{long_term}"
+            return f"## Research Context\n\n{long_term}"
+
+        # Semantic Retrieval
+        try:
+            from src.agents.embeddings import embedder
+            vector = embedder.embed_text(query)
+            tbl = self.db.open_table(self.table_name)
+            results = tbl.search(vector).limit(top_k).to_list()
+            
+            if not results:
+                return ""
+                
+            context = "## Research Context (Relevant Past Findings)\n\n"
+            for r in results:
+                context += f"### Finding [{r.get('timestamp', 'Unknown')}]\n{r.get('text', '')}\n\n"
+            return context
+        except Exception as e:
+            logger.error(f"Failed to retrieve context from LanceDB: {e}")
+            # Fallback
+            long_term = self.read_long_term()
+            if not long_term: return ""
+            if len(long_term) > max_chars:
+                long_term = long_term[:max_chars] + "\n\n...(truncated)"
+            return f"## Research Context\n\n{long_term}"
 
     def get_recent_queries(self, count: int = 5) -> List[Dict[str, Any]]:
         """Get recent queries from history file.

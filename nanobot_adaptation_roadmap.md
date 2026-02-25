@@ -47,7 +47,7 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
     - This will resolve the "slowness" issue by using binary storage and optimized indexing for vector and text search.
 - [ ] **Verification Node (Critique)**:
     - Implement a "Critique" node in the LangGraph workflow that validates generated claims against retrieved evidence before showing the final answer.
-- [ ] **Semantic Memory Store**:
+- [x] **Semantic Memory Store**:
     - Migrate `RESEARCH_MEMORY.md` to the local vector store to support retrieval from thousands of past findings without context window limits.
 
 ### Phase 3: Research Scope Expansion (Complete)

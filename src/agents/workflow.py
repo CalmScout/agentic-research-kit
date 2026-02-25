@@ -167,7 +167,7 @@ async def query_with_agents(
     memory = MemoryStore(workspace)
 
     # Load research context from memory
-    memory_context = memory.get_research_context(max_chars=2000)
+    memory_context = memory.get_research_context(query=query, max_chars=2000, top_k=5)
     if memory_context:
         logger.debug(f"Loaded {len(memory_context)} chars of research context")
 

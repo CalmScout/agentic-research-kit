@@ -6,7 +6,7 @@ This document provides a comparative analysis of the architectures for ARK (Agen
 
 ## 1. ARK (Agentic Research Kit) Architecture (Current State)
 
-ARK is currently implemented as a sequential multi-agent workflow using **LangGraph**. It has been enhanced with several core patterns from `nanobot` (like the Tool Registry and Two-Layer Memory) but still operates on a linear execution model.
+ARK is currently implemented as a sequential multi-agent workflow using **LangGraph**. It has been enhanced with core patterns from `nanobot` (like the Tool Registry and Two-Layer Memory) and uses **LanceDB** for high-performance storage.
 
 ### ARK Mermaid Diagram
 
@@ -21,19 +21,19 @@ graph TD
     subgraph "ARK Core Workflow (LangGraph)"
         START((START)) --> ER[Enhanced Retriever Agent]
         ER --> ERG[Enhanced Response Generator Agent]
-        ERG --> END((END))
+        ERG --> VN[Verification Node Agent]
+        VN --> END((END))
     end
 
     subgraph "Agent 1: Enhanced Retriever"
         ER_TR[Tool Registry]
-        ER_QA[Query Analyzer]
         ER_EXT[Entity Extractor]
-        ER_RAG[Local RAG Tool]
+        ER_RAG[Hybrid RAG Tool]
         ER_WEB[Web Search/Fetch Tools]
         ER_MCP[MCP Tools]
         
         ER --> ER_TR
-        ER_TR --> ER_QA & ER_EXT & ER_RAG & ER_WEB & ER_MCP
+        ER_TR --> ER_EXT & ER_RAG & ER_WEB & ER_MCP
     end
 
     subgraph "Agent 2: Enhanced Response Generator"
@@ -46,8 +46,16 @@ graph TD
         ERG_TR --> ERG_RER & ERG_AGG & ERG_GEN
     end
 
+    subgraph "Agent 3: Verification Node"
+        VN_FC[Fact Checker]
+        VN_CH[Hallucination Cleanup]
+        
+        VN --> VN_FC --> VN_CH
+    end
+
     subgraph "Memory & Storage"
-        LR[(LightRAG Database)]
+        LDB[(LanceDB Store)]
+        KG[(NetworkX KG)]
         MS_RH[RESEARCH_MEMORY.md]
         MS_QH[QUERY_HISTORY.md]
         PX[Phoenix Observability]
@@ -55,21 +63,24 @@ graph TD
 
     CLI & API & TG --> START
     
-    ER_RAG <--> LR
+    ER_RAG <--> LDB & KG
     ER_WEB <--> WEB[World Wide Web]
     
-    ERG_GEN <--> MS_RH & MS_QH
+    ERG_GEN <--> LDB
+    VN_FC <--> LDB
     
     ER -.-> PX
     ERG -.-> PX
+    VN -.-> PX
 ```
 
 ### ARK Key Characteristics
-*   **Sequential Workflow**: Uses LangGraph to orchestrate two enhanced agents in a predefined order.
-*   **Tool Registry**: Both agents use a dynamic `ToolRegistry` to execute specialized tasks (retrieval, reranking, web search).
-*   **Two-Layer Memory**: Persistent context via `RESEARCH_MEMORY.md` (findings) and `QUERY_HISTORY.md` (logs).
-*   **Hybrid Retrieval**: Combines local RAG (LightRAG) with proactive Web Research (Brave Search) and MCP-based tools.
-*   **Observability**: Integrated with Arize Phoenix for deep tracing of the RAG pipeline.
+*   **3-Agent Sequential Workflow**: Orchestrates three specialized agents (Retriever, Generator, Verifier) via LangGraph.
+*   **Verification Node**: Explicit fact-checking step to prevent hallucinations and ensure citation integrity.
+*   **LanceDB Storage**: High-performance binary storage for documents, entities, and vectors.
+*   **Tool Registry**: Agents use a dynamic `ToolRegistry` to execute specialized tasks.
+*   **Two-Layer Memory**: Persistent context via `RESEARCH_MEMORY.md` (distilled findings) and `QUERY_HISTORY.md` (audit logs).
+*   **Hybrid Retrieval**: Combined Vector + BM25 + Knowledge Graph retrieval.
 
 ---
 
@@ -146,11 +157,15 @@ graph LR
 
 | Feature | ARK (Current) | nanobot (Future Target) |
 | :--- | :--- | :--- |
-| **Execution Model** | Sequential (Pipeline) | Event-Driven (Reactive) |
-| **Orchestration** | LangGraph (2 Nodes) | Agent Loop + Message Bus |
+| **Execution Model** | Sequential (3-Agent Pipeline) | Event-Driven (Reactive Loop) |
+| **Orchestration** | LangGraph (3 Nodes) | Agent Loop + Message Bus |
 | **Communication** | Direct (Request-Response) | Pub/Sub via Message Bus |
 | **Task Handling** | Predefined Steps | Dynamic Tool Execution |
 | **Delegation** | Fixed Pipeline | Subagent Spawning (Fractal) |
-| **Memory Store** | Flat Markdown Files | Vector Store (Semantic RAG) |
+| **Memory Store** | LanceDB (Columnar) | Vector Store (Semantic RAG) |
 
 The project has successfully adapted the **Tool Registry**, **Two-Layer Memory**, **MCP Support**, and **Channel Gateways** (Telegram) from nanobot. The next major phases involve introducing the **Message Bus** for true asynchronicity and **Subagent Manager** for complex task delegation.
+
+---
+
+**Last Updated**: 2026-02-25 (Updated for 3-agent architecture and LanceDB migration)

@@ -62,7 +62,7 @@ def _initialize_phoenix():
 
         # Register Phoenix with OpenTelemetry
         tracer_provider = phoenix_register(
-            project_name="multimodal-rag",
+            project_name="agentic-research-kit",
             endpoint=collector_endpoint,
         )
 

@@ -50,14 +50,6 @@ The core isolation layer that manages thread-local resources.
 - `_get_thread_resources()`: Manages thread-local storage for both the `asyncio` loop and the `LightRAG` instance.
 - `aquery_sync()`: Handles the switch between `aquery_data` (for context) and `aquery` (for answers).
 
-**Logic**:
-```python
-def run_in_thread(self):
-    loop, rag = self._get_thread_resources() # Ensures local to this thread
-    coro = coro_factory(rag)
-    return loop.run_until_complete(coro)
-```
-
 ### 2. HybridRetrieverTool (`src/agents/tools/rag_tools/hybrid_retriever.py`)
 
 The high-level tool used by the LangGraph agents.
@@ -74,25 +66,7 @@ Provides the configuration and factory for LightRAG using local models.
 **Configuration**:
 - **Embeddings**: `Qwen/Qwen3-VL-Embedding-2B` (local, 2048D)
 - **LLM (Extraction)**: `Qwen/Qwen2.5-1.5B-Instruct` (local)
-- **Storage**: JSON + NanoVectorDB + NetworkX
-
-## Response Formats
-
-### Structured Retrieval (`only_need_context=True`)
-Uses `aquery_data()` which returns:
-```json
-{
-  "status": "success",
-  "data": {
-    "chunks": [{"content": "...", "score": 0.9, "file_path": "..."}],
-    "entities": [...],
-    "relationships": [...]
-  }
-}
-```
-
-### Generation Mode (`only_need_context=False`)
-Uses `aquery()` which returns a `string` (for backward compatibility).
+- **Storage**: **LanceDB** (High-performance KV & Vector) + NetworkX (Graph)
 
 ## Performance Characteristics
 
@@ -106,22 +80,15 @@ Uses `aquery()` which returns a `string` (for backward compatibility).
 ## Troubleshooting
 
 ### Issue: "LightRAG operation timed out"
-
 **Symptoms**: `TimeoutError` after 60s.
 **Cause**: Heavy GPU load or extremely large knowledge graph.
 **Solution**: Increase `timeout` in `IsolatedLightRAG` initialization.
 
 ### Issue: "Event loop is closed"
-
 **Symptoms**: Occurs if the process is shutting down or if thread-local storage is corrupted.
-**Solution**: The current implementation re-creates the loop if it's closed, so this should be rare. Restart the process if persistent.
-
-## Implementation Details
-
-### Why the `rag_factory`?
-LightRAG-hku initializes several `asyncio.Queue` and `Worker` objects upon instantiation. If the instance is created in the main thread and then used in a `run_until_complete` call in another thread, these queues will be bound to the wrong event loop, causing hangs or errors. The factory pattern ensures "Create in thread X, use in thread X".
+**Solution**: The current implementation re-creates the loop if it's closed. Restart the process if persistent.
 
 ---
 
-**Last Updated**: 2026-02-20
+**Last Updated**: 2026-02-25 (Updated for LanceDB integration)
 **Status**: ✅ Production Ready (Isolated hybrid retrieval active)

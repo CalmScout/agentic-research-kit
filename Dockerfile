@@ -51,7 +51,7 @@ COPY pyproject.toml ./
 
 # Install application
 COPY src ./src
-COPY cli.py ./
+COPY main.py ./
 
 # Set permissions
 RUN chown -R appuser:appuser /app
@@ -60,7 +60,7 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Ensure Python uses the virtual environment
-ENV PYTHONPATH="/app/src:/app/.venv/lib/python3.11/site-packages"
+ENV PYTHONPATH="/app:/app/src:/app/.venv/lib/python3.11/site-packages"
 ENV PATH="/app/.venv/bin:$PATH"
 
 # Expose port

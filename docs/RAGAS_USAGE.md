@@ -1,11 +1,11 @@
 # RAGAS Evaluation Usage Guide
 
-This guide explains how to use RAGAS (Retrieval Augmented Generation Assessment) evaluation with your multimodal research RAG system.
+This guide explains how to use RAGAS (Retrieval Augmented Generation Assessment) evaluation with the Agentic Research Kit (ARK).
 
 ## Quick Reference
 
 **Common Issues Fixed:**
-- ✅ **ImportError `ragas.configs`**: Fixed in code - use latest version
+- ✅ **ImportError `ragas.configs`**: Fixed in code - use latest version.
 - ⚠️ **OpenAI API Key for `answer_relevancy`**: This metric requires embeddings (OpenAI API). Other metrics work with DeepSeek only.
 
 **Recommended Commands:**
@@ -49,10 +49,10 @@ This complements your existing simple metrics (Precision@K, Recall@K, MRR) by us
 
 **RAGAS** = Retrieval Augmented Generation Assessment
 
-- Uses **LLM-as-a-judge** to evaluate RAG systems
-- Measures **generation quality** (not just retrieval)
-- Provides **human-aligned metrics** that correlate with user satisfaction
-- Developed by Exploding Gradients (https://github.com/explodinggradients/ragas)
+- Uses **LLM-as-a-judge** to evaluate RAG systems.
+- Measures **generation quality** (not just retrieval).
+- Provides **human-aligned metrics** that correlate with user satisfaction.
+- Developed by Exploding Gradients (https://github.com/explodinggradients/ragas).
 
 ### Why RAGAS?
 
@@ -62,9 +62,9 @@ This complements your existing simple metrics (Precision@K, Recall@K, MRR) by us
 | **RAGAS Metrics** | Generation quality | "Is the response factually accurate?" |
 
 **For research systems like yours**, RAGAS is critical because:
-- You care about **grounding** (Faithfulness)
-- You care about **answer quality** (Answer Relevancy)
-- You need to catch **hallucinations** (Faithfulness < 0.8)
+- You care about **grounding** (Faithfulness).
+- You care about **answer quality** (Answer Relevancy).
+- You need to catch **hallucinations** (Faithfulness < 0.8).
 
 ---
 
@@ -79,16 +79,6 @@ uv run python -c "import ragas; print(f'RAGAS {ragas.__version__}')"
 # Update RAGAS to latest
 uv sync --upgrade
 ```
-
-### Dependencies
-
-RAGAS requires:
-- ✅ `ragas>=0.2.0`
-- ✅ `langchain-openai`
-- ✅ **DeepSeek API key** (for most metrics) - Already configured in `.env`
-- ⚠️ **OpenAI API key** (ONLY for `answer_relevancy` metric)
-
-**Important:** The `answer_relevancy` metric requires embeddings, which defaults to using OpenAI's API. If you don't have an OpenAI API key, you can still use the other three metrics (`faithfulness`, `context_precision`, `context_recall`) with just your DeepSeek API key.
 
 ---
 
@@ -117,19 +107,19 @@ uv run ark evaluate --metrics ragas -n 50
 **What it measures:** Factual consistency of the response with retrieved context (Grounding).
 
 **How it works:**
-1. Extracts factual claims/findings from the response
-2. Verifies each finding against retrieved contexts using LLM
-3. Calculates: `(Supported Findings) / (Total Findings)`
+1. Extracts factual claims/findings from the response.
+2. Verifies each finding against retrieved contexts using LLM.
+3. Calculates: `(Supported Findings) / (Total Findings)`.
 
 **Score interpretation:**
-- **0.8-1.0** (Excellent): Responses are well-grounded in context
-- **0.6-0.8** (Good): Minor hallucinations
-- **<0.4** (Poor): Major factual errors
+- **0.8-1.0** (Excellent): Responses are well-grounded in context.
+- **0.6-0.8** (Good): Minor hallucinations.
+- **<0.4** (Poor): Major factual errors.
 
 **Why it matters for research:**
-- Directly measures your system's reliability
-- Catches hallucinations before they impact research findings
-- Critical for academic and professional use
+- Directly measures your system's reliability.
+- Catches hallucinations before they impact research findings.
+- Critical for academic and professional use.
 
 ---
 
@@ -144,4 +134,4 @@ uv run ark evaluate --metrics ragas -n 50
 
 ---
 
-**Last Updated:** 2026-02-23 (Updated for ARK focus)
+**Last Updated:** 2026-02-25 (Updated for ARK focus)

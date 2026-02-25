@@ -126,5 +126,16 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 *   ⬜ **Phase 5: Cognitive Architecture**: Iterative ReAct reasoning loops and async event bus.
 *   ⬜ **Phase 6: Temporal Autonomy**: Cron services and self-waking research tasks.
 
+## 📚 Documentation
+
+Detailed technical guides are available in the `docs/` directory:
+
+- **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)**: Visual deep-dive into the 3-agent research flow.
+- **[LightRAG Integration](docs/LIGHTRAG_INTEGRATION.md)**: Details on hybrid retrieval and LanceDB storage.
+- **[Observability Setup](docs/PHOENIX.md)**: Guide to using Arize Phoenix for trace analysis.
+- **[Testing Guide](docs/TESTING.md)**: Instructions for running the 50+ test suite and coverage reports.
+- **[RAGAS Usage](docs/RAGAS_USAGE.md)**: Automated evaluation of retrieval and generation quality.
+- **[Evolution Roadmap](docs/nanobot_adaptation_roadmap.md)**: Detailed status of nanobot feature adaptation.
+
 ## 📝 License
 Apache License 2.0

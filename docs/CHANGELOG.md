@@ -16,11 +16,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **MCP Tool Support**: Added capability to dynamically load and execute tools from Model Context Protocol servers.
 - **Web Research Tools**: Ported proactive Brave Search and Web Fetch tools from the nanobot framework.
 - **Telegram Gateway**: Added asynchronous communication channel for remote research queries.
+- **RAGAS Evaluation Pipeline**: Established a "Golden Dataset" and automated evaluator for retrieval and generation quality.
 
 ### Changed
 - **Project Rebranding**: Renamed from "MultiModal Agentic RAG" to **Agentic Research Kit (ARK)**.
 - **Documentation Refactor**: Consistently moved technical guides to the `docs/` directory and updated all architecture diagrams.
-- **Test Suite Modernization**: Achieved >90% coverage on core workflow components and resolved all deprecation/runtime warnings.
+- **Test Suite Modernization**: Achieved >90% coverage on core workflow components and resolved all deprecation/runtime warnings (Phase 3.5 Complete).
+- **Roadmap Shift**: Transitioned focus to **Phase 4: Cognitive Intelligence**, prioritizing iterative reasoning loops (ReAct) and subagent delegation.
 
 ### Fixed
 - **VRAM Optimization**: Unified model loading for Qwen3-VL and Qwen2.5 saves ~6GB VRAM.

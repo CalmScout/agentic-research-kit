@@ -61,7 +61,8 @@ example-custom:  ## Run custom agent example
 docs:  ## Serve documentation
 	@echo "Documentation available at:"
 	@echo "  - README.md"
-	@echo "  - TECHNICAL_REPORT.md"
+	@echo "  - docs/ARK_NANOBOT_ARCHITECTURE.md"
+	@echo "  - docs/ROADMAP.md"
 	@echo "  - docs/ARCHITECTURE_DIAGRAMS.md"
 
 docker-build:  ## Build Docker image

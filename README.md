@@ -138,9 +138,11 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 *   ✅ **Phase 1: Extensibility**: MCP Client implementation and dynamic tool loading.
 *   ✅ **Phase 2: Performance & Integrity**: LanceDB migration and Verification Node (Critique).
 *   ✅ **Phase 3: Research Scope Expansion**: Integrated Web Search and Proactive Research.
-*   ⬜ **Phase 4: Interface & Asynchronicity**: Message Bus integration and interactive clarification.
-*   ⬜ **Phase 5: Cognitive Architecture**: Iterative ReAct reasoning loops and async event bus.
-*   ⬜ **Phase 6: Temporal Autonomy**: Cron services and self-waking research tasks.
+*   ✅ **Phase 3.5: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
+*   ⬜ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and subagent delegation.
+*   ⬜ **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB.
+*   ⬜ **Phase 6: Interface & Asynchronicity**: Message Bus integration and interactive clarification.
+*   ⬜ **Phase 7: Temporal Autonomy**: Cron services and self-waking research tasks.
 
 ## 📚 Documentation
 
@@ -151,7 +153,7 @@ Detailed technical guides are available in the `docs/` directory:
 - **[Observability Setup](docs/PHOENIX.md)**: Guide to using Arize Phoenix for trace analysis.
 - **[Testing Guide](docs/TESTING.md)**: Instructions for running the 50+ test suite and coverage reports.
 - **[RAGAS Usage](docs/RAGAS_USAGE.md)**: Automated evaluation of retrieval and generation quality.
-- **[Evolution Roadmap](docs/nanobot_adaptation_roadmap.md)**: Detailed status of nanobot feature adaptation.
+- **[Evolution Roadmap](docs/ROADMAP.md)**: Detailed status of nanobot feature adaptation.
 
 ## 📝 License
 Apache License 2.0

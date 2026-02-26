@@ -164,8 +164,8 @@ graph LR
 | **Delegation** | Fixed Pipeline | Subagent Spawning (Fractal) |
 | **Memory Store** | LanceDB (Columnar) | Vector Store (Semantic RAG) |
 
-The project has successfully adapted the **Tool Registry**, **Two-Layer Memory**, **MCP Support**, and **Channel Gateways** (Telegram) from nanobot. The next major phases involve introducing the **Message Bus** for true asynchronicity and **Subagent Manager** for complex task delegation.
+The project has successfully adapted the **Tool Registry**, **Two-Layer Memory**, **MCP Support**, and **Channel Gateways** (Telegram) from nanobot. The next major phases involve **Phase 4: Cognitive Intelligence** (Iterative ReAct loops and Subagent Manager) and **Phase 6: Interface & Asynchronicity** (Message Bus for true asynchronicity).
 
 ---
 
-**Last Updated**: 2026-02-25 (Updated for 3-agent architecture and LanceDB migration)
+**Last Updated**: 2026-02-26 (Updated to align with Phase 4/6 roadmap focus)

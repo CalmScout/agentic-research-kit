@@ -1,4 +1,4 @@
-# Nanobot Adaptation Roadmap for Agentic Research Kit (ARK)
+# ARK Roadmap
 
 ## Overview
 This document outlines the evaluation of the Agentic Research Kit (ARK) architecture, the status of features adapted from the `nanobot` project, and the roadmap for future enhancements.
@@ -41,7 +41,7 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
 - [x] **Dynamic Tool Loading**: Allow tools discovered via MCP to be registered in the `ToolRegistry`.
 - [x] **Configuration Integration**: Added `mcp_servers` to global settings.
 
-### Phase 2: Performance & Integrity (Immediate Focus)
+### Phase 2: Performance & Integrity (Complete)
 - [x] **High-Performance Storage Backend**:
     - [x] Migrated from JSON-based storage to **LanceDB**.
     - [x] Implemented `LanceDBKVStorage`, `LanceDBDocStatusStorage`, and `LanceDBVectorDBStorage`.
@@ -49,7 +49,7 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
 - [x] **Verification Node (Critique)**:
     - [x] Implemented a "Critique" node in the LangGraph workflow that validates generated claims against retrieved evidence before showing the final answer.
 - [x] **Semantic Memory Store**:
-    - Migrate `RESEARCH_MEMORY.md` to the local vector store to support retrieval from thousands of past findings without context window limits.
+    - [x] Migrate `RESEARCH_MEMORY.md` to the local vector store to support retrieval from thousands of past findings without context window limits.
 
 ### Phase 3: Research Scope Expansion (Complete)
 - [x] **Integrated Web Search**: 

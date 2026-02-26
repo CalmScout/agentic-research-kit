@@ -69,23 +69,31 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
     - Established a "Golden Dataset" in `data/research_golden_dataset.csv`.
     - Implemented `RAGASEvaluator` and `run_ragas_eval.py` script.
 
-### Phase 4: Interface & Asynchronicity (Planned)
+### Phase 4: Cognitive Intelligence (Immediate Focus)
+- [ ] **Iterative Reasoning Loop (ReAct)**:
+    - Transition `workflow.py` from a linear pipeline (Retrieve -> Generate -> Verify) to a dynamic loop (Reason -> Act -> Observe -> Repeat).
+    - Enable the `VerificationNode` to trigger "Refinement Cycles" if evidence is insufficient or hallucinations are detected.
+    - Implement "Research Gap" detection to guide subsequent retrieval steps.
+- [ ] **Subagent Delegation**:
+    - Port `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents to handle specialized sub-tasks.
+
+### Phase 5: High-Fidelity Research Memory (Planned)
+- [ ] **Semantic Research Store (LanceDB)**:
+    - Fully migrate `RESEARCH_MEMORY.md` findings to a vector-enabled LanceDB table.
+    - Implement "Long-term RAG" to allow retrieval from past research findings across different sessions.
+    - Add semantic deduplication to prevent redundant findings from clogging the memory.
+
+### Phase 6: Interface & Asynchronicity (Planned)
 - [ ] **Message Bus Integration**:
-    - Refactor `ChannelManager` to use an async `MessageBus` (Inbound/Outbound queues) to decouple the Telegram listener from the Agent processor.
+    - Refactor `ChannelManager` to use an async `MessageBus` (Inbound/Outbound queues) to decouple communication channels from the Agent processor.
+- [ ] **Async Event Bus**:
+    - Refactor the core loop to be asynchronous, emitting "thinking" events and partial updates via the `MessageBus`.
 - [ ] **Interactive Clarification**:
     - Enable the agent to pause execution and ask the user for clarification via the `ChannelGateway` if a query is ambiguous (Human-in-the-Loop).
 - [ ] **Slack/Discord Gateway**: 
     - Port Slack and Discord channels from nanobot for broader collaboration.
 
-### Phase 5: Cognitive Architecture (Planned)
-- [ ] **Iterative Reasoning Loop (ReAct)**:
-    - Transition `workflow.py` from a linear pipeline (Retrieve -> Generate) to a dynamic loop (Reason -> Act -> Observe -> Repeat).
-- [ ] **Async Event Bus**:
-    - Refactor the core loop to be asynchronous, emitting "thinking" events and partial updates via the `MessageBus`.
-- [ ] **Subagent Delegation**:
-    - Port `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents.
-
-### Phase 6: Temporal Autonomy (Planned)
+### Phase 7: Temporal Autonomy (Planned)
 - [ ] **Cron Service**:
     - Port `CronService` and `CronTool` for scheduled research tasks.
 - [ ] **Self-Wake**:

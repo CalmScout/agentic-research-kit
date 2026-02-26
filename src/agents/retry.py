@@ -148,23 +148,3 @@ retry_tool_execution = async_retry_with_backoff(
     max_attempts=2, multiplier=1.0, max_wait=5.0, exception_types=(AgentError,)
 )
 """Decorator for retrying tool execution operations."""
-
-
-# -------------------------------------------------------------------------
-# Pre-configured retry decorators for common operations
-# -------------------------------------------------------------------------
-
-retry_llm_call = async_retry_with_backoff(
-    max_attempts=3, multiplier=2.0, max_wait=10.0, exception_types=(ConnectionError, TimeoutError)
-)
-"""Decorator for retrying LLM API calls with 2x exponential backoff."""
-
-retry_vector_search = async_retry_with_backoff(
-    max_attempts=2, multiplier=1.0, max_wait=5.0, exception_types=(ConnectionError, TimeoutError)
-)
-"""Decorator for retrying vector search operations."""
-
-retry_tool_execution = async_retry_with_backoff(
-    max_attempts=2, multiplier=1.0, max_wait=5.0, exception_types=(AgentError,)
-)
-"""Decorator for retrying tool execution operations."""

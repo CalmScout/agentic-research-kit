@@ -623,6 +623,19 @@ _vision_model: Qwen3VisionEmbedder | None = None
 _text_llm: Qwen3TextLLM | Qwen3VLTextLLM | None = None
 _embedding_model: Any | None = None
 _unified_model: UnifiedQwen3VL | None = None
+_qwen2_llm = None
+_phi35_llm = None
+
+
+def reset_models():
+    """Reset all model singletons (primarily for testing)."""
+    global _vision_model, _text_llm, _embedding_model, _unified_model, _qwen2_llm, _phi35_llm
+    _vision_model = None
+    _text_llm = None
+    _embedding_model = None
+    _unified_model = None
+    _qwen2_llm = None
+    _phi35_llm = None
 
 
 def get_unified_model(

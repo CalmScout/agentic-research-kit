@@ -338,7 +338,7 @@ class RAGASEvaluator:
         loop = asyncio.get_event_loop()
 
         with ThreadPoolExecutor() as executor:
-            from ragas import EvaluationResult
+            from ragas.dataset_schema import EvaluationResult
         result = await loop.run_in_executor(
             executor,
             evaluate,

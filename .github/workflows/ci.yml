@@ -67,6 +67,6 @@ jobs:
       with:
         context: .
         push: false
-        tags: multimodal-agentic-rag:latest
+        tags: agentic-research-kit:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max

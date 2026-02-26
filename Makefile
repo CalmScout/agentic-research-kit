@@ -1,4 +1,4 @@
-.PHONY: help install test lint format clean serve docs ingest query
+.PHONY: help install test lint format clean serve docs ingest query ci
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -26,6 +26,8 @@ format-check:  ## Check code formatting
 
 type-check:  ## Run type checker (mypy)
 	uv run mypy src/ --ignore-missing-imports
+
+ci: lint format-check type-check test-cov docker-build ## Run full local CI pipeline
 
 clean:  ## Clean up temporary files
 	find . -type d -name __pycache__ -exec rm -rf {} +
@@ -66,15 +68,15 @@ docs:  ## Serve documentation
 	@echo "  - docs/ARCHITECTURE_DIAGRAMS.md"
 
 docker-build:  ## Build Docker image
-	docker-compose build
+	docker compose build
 
 docker-up:  ## Start Docker services
-	docker-compose up -d
+	docker compose up -d
 
 docker-down:  ## Stop Docker services
-	docker-compose down
+	docker compose down
 
 docker-logs:  ## View Docker logs
-	docker-compose logs -f api
+	docker compose logs -f api
 
 .DEFAULT_GOAL := help

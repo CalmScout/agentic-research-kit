@@ -6,7 +6,7 @@ import json
 import tempfile
 from typing import List, Dict, Any, AsyncGenerator, Optional
 from pathlib import Path
-from unittest.mock import Mock, AsyncMock
+from unittest.mock import Mock, AsyncMock, patch
 
 # Add src to path
 import sys
@@ -412,40 +412,57 @@ def mock_json_file(temp_dir):
 # -----------------------------------------------------------------------------
 # Test Configuration
 # -----------------------------------------------------------------------------
-@pytest.fixture
+@pytest.fixture(autouse=True)
 def test_config(mock_embedding_model, mock_llm, mock_retriever):
     """Configure test with mocked models.
 
-    Note: This fixture is NOT autouse. Tests that need global mocking should
-    explicitly request this fixture.
+    This fixture is autouse=True to ensure all tests use mocked models
+    and prevent real LLM loading which causes slowness.
     """
-    try:
-        # Monkey-patch the model singletons if they exist
-        from src.agents import embeddings, model_selector, simple_retriever
+    with patch("src.utils.vision_embedding.get_embedding_model", return_value=mock_embedding_model), \
+         patch("src.utils.vision_embedding.get_qwen2_llm", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.get_vision_model", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.get_text_llm", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.get_unified_model", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.Qwen3VLEmbedding", return_value=mock_embedding_model), \
+         patch("src.utils.vision_embedding.Qwen3Embedding", return_value=mock_embedding_model), \
+         patch("src.utils.vision_embedding.Qwen3VisionEmbedder", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.Qwen2TextLLM", return_value=mock_llm), \
+         patch("src.utils.vision_embedding.UnifiedQwen3VL", return_value=mock_llm):
+        
+        try:
+            # Monkey-patch the model singletons if they exist
+            from src.agents import embeddings, model_selector, simple_retriever
 
-        # Save original singletons (if they exist)
-        original_embedding = getattr(embeddings, 'embedder', None)
-        original_model_selector = getattr(model_selector, '_model_selector', None)
-        original_retriever = getattr(simple_retriever, '_retriever_instance', None)
+            # Save original singletons (if they exist)
+            original_embedding = getattr(embeddings, 'embedder', None)
+            original_model_selector = getattr(model_selector, '_selector', None)
+            original_retriever = getattr(simple_retriever, '_retriever_instance', None)
 
-        # Patch if possible
-        if hasattr(embeddings, 'embedder'):
-            embeddings.embedder = mock_embedding_model
-        if hasattr(model_selector, '_model_selector'):
-            model_selector._model_selector = mock_llm
-        if hasattr(simple_retriever, '_retriever_instance'):
-            simple_retriever._retriever_instance = mock_retriever
+            # Create a mock selector that returns the mock LLM
+            mock_selector = Mock()
+            mock_selector.get_local_llm.return_value = mock_llm
+            mock_selector.get_llm_with_fallback.return_value = mock_llm
+            mock_selector.get_llm_for_provider.return_value = mock_llm
 
-        yield mock_embedding_model, mock_llm, mock_retriever
+            # Patch if possible
+            if hasattr(embeddings, 'embedder'):
+                embeddings.embedder = mock_embedding_model
+            if hasattr(model_selector, '_selector'):
+                model_selector._selector = mock_selector
+            if hasattr(simple_retriever, '_retriever_instance'):
+                simple_retriever._retriever_instance = mock_retriever
 
-        # Restore original singletons
-        if original_embedding is not None:
-            embeddings.embedder = original_embedding
-        if original_model_selector is not None:
-            model_selector._model_selector = original_model_selector
-        if original_retriever is not None:
-            simple_retriever._retriever_instance = original_retriever
+            yield mock_embedding_model, mock_llm, mock_retriever
 
-    except Exception:
-        # If patching fails, just yield the mocks
-        yield mock_embedding_model, mock_llm, mock_retriever
+            # Restore original singletons
+            if original_embedding is not None:
+                embeddings.embedder = original_embedding
+            if original_model_selector is not None:
+                model_selector._selector = original_model_selector
+            if original_retriever is not None:
+                simple_retriever._retriever_instance = original_retriever
+
+        except Exception:
+            # If patching fails, just yield the mocks
+            yield mock_embedding_model, mock_llm, mock_retriever

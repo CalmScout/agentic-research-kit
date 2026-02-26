@@ -1,4 +1,5 @@
 import pytest
+import json
 from unittest.mock import MagicMock, patch, AsyncMock
 from src.agents.verification import verification_agent
 from src.agents.base_state import BaseAgentState
@@ -15,10 +16,13 @@ async def test_verification_agent_verified():
     mock_llm_response = MagicMock()
     mock_llm_response.content = '{"is_verified": true, "feedback": "All claims supported.", "corrected_response": "The capital of France is Paris."}'
 
-    with patch("src.agents.model_selector.ModelSelector.get_llm_with_fallback") as mock_get_llm:
+    # Patch get_model_selector to return our mock
+    with patch("src.agents.verification.get_model_selector") as mock_get_selector:
+        mock_selector = MagicMock()
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response)
-        mock_get_llm.return_value = mock_llm
+        mock_selector.get_llm_with_fallback.return_value = mock_llm
+        mock_get_selector.return_value = mock_selector
 
         result = await verification_agent(state)
 
@@ -43,10 +47,13 @@ async def test_verification_agent_corrected():
         '"corrected_response": "The capital of France is Paris."}'
     )
 
-    with patch("src.agents.model_selector.ModelSelector.get_llm_with_fallback") as mock_get_llm:
+    # Patch get_model_selector to return our mock
+    with patch("src.agents.verification.get_model_selector") as mock_get_selector:
+        mock_selector = MagicMock()
         mock_llm = MagicMock()
         mock_llm.ainvoke = AsyncMock(return_value=mock_llm_response)
-        mock_get_llm.return_value = mock_llm
+        mock_selector.get_llm_with_fallback.return_value = mock_llm
+        mock_get_selector.return_value = mock_selector
 
         result = await verification_agent(state)
 

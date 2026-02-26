@@ -165,6 +165,14 @@ addopts = "--ignore=tests/unit_local"
 python_files = ["test_*.py"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore:tagMap is deprecated:DeprecationWarning:pyasn1",
+    "ignore:typeMap is deprecated:DeprecationWarning:pyasn1",
+    "ignore:The phoenix.evals.templating module is deprecated:DeprecationWarning:phoenix",
+    "ignore:The 'lia' package has been renamed to 'cross_web':DeprecationWarning:strawberry",
+    "ignore:.*json_encoders.* is deprecated:DeprecationWarning",
+    "ignore:Passing types to .strawberry.union. is deprecated:DeprecationWarning:phoenix",
+]
 
 # -----------------------------------------------------------------------------
 # Coverage Configuration

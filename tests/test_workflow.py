@@ -3,6 +3,8 @@
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
 import os
+import json
+from pathlib import Path
 
 from src.agents.workflow import (
     create_multi_agent_workflow,
@@ -26,38 +28,47 @@ async def test_workflow_creation():
 
 @pytest.mark.asyncio
 async def test_workflow_end_to_end(agent_state_minimal, mock_llm, mock_embedding_model):
-    """Test full workflow with mocked agents (2-agent architecture)."""
+    """Test full workflow with mocked agents."""
     query = "Is climate change real?"
 
-    # Mock enhanced retriever agent (EntityExtractorTool uses get_model_selector)
-    with patch("src.agents.tools.rag_tools.entity_extractor.get_model_selector") as mock_get_model:
-        with patch("src.agents.enhanced_retriever.embedder", mock_embedding_model):
-            mock_get_model.return_value = Mock(get_local_llm=Mock(return_value=mock_llm))
+    # Mock the agent functions directly in the workflow module
+    with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
+        with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
+            with patch("src.agents.workflow.verification_agent") as mock_verifier:
+                
+                # Setup mock returns
+                mock_retriever.return_value = {
+                    "query_type": "text",
+                    "entities": ["climate change"],
+                    "retrieved_docs": [{"text": "test", "score": 0.9}],
+                    "retrieval_scores": [0.9],
+                    "retrieval_method": "mock"
+                }
+                
+                mock_generator.return_value = {
+                    "response": "Final response",
+                    "sources": [{"text": "test", "score": 0.9}],
+                    "top_results": [{"text": "test", "score": 0.9}],
+                    "confidence": 0.9
+                }
+                
+                mock_verifier.return_value = {
+                    "response": "Final response",
+                    "verification_status": "verified",
+                    "verification_feedback": "All good"
+                }
 
-            # Mock simple retriever tool
-            with patch("src.agents.tools.rag_tools.simple_retriever.simple_retriever", return_value={
-                "retrieved_docs": [{"text": "test", "score": 0.9}],
-                "retrieval_scores": [0.9],
-                "retrieval_method": "mock"
-            }):
-                # Mock enhanced response generator agent
-                with patch("src.agents.enhanced_response_generator.get_model_selector") as mock_get_model2:
-                    mock_llm2 = Mock()
-                    mock_llm2.ainvoke = AsyncMock(
-                        return_value=Mock(content="Final response")
-                    )
-                    mock_get_model2.return_value = Mock(
-                        get_local_llm=Mock(return_value=mock_llm2),
-                        get_llm_with_fallback=Mock(return_value=mock_llm2)
-                    )
+                result = await query_with_agents(query)
 
-                    result = await query_with_agents(query)
-
-                    # Verify result structure
-                    assert "query" in result
-                    assert "response" in result
-                    assert "sources" in result
-                    assert "retrieved_count" in result
+                # Verify result structure
+                assert "query" in result
+                assert "response" in result
+                assert "sources" in result
+                assert "retrieved_count" in result
+                assert result["response"] == "Final response"
+                assert mock_retriever.called
+                assert mock_generator.called
+                assert mock_verifier.called
 
 
 @pytest.mark.asyncio
@@ -114,19 +125,24 @@ def test_query_with_agents_sync():
 
 @pytest.mark.asyncio
 async def test_workflow_state_propagation():
-    """Test that state propagates correctly through agents (2-agent architecture)."""
+    """Test that state propagates correctly through agents."""
     query = "test query"
 
-    with patch("src.agents.tools.rag_tools.entity_extractor.get_model_selector"):
-        with patch("src.agents.enhanced_retriever.embedder"):
-            with patch("src.agents.tools.rag_tools.simple_retriever.simple_retriever"):
-                with patch("src.agents.enhanced_response_generator.get_model_selector"):
-                    result = await query_with_agents(query)
+    with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
+        with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
+            with patch("src.agents.workflow.verification_agent") as mock_verifier:
+                
+                mock_retriever.return_value = {"entities": ["test"], "retrieved_docs": [{"text": "doc1"}]}
+                mock_generator.return_value = {"response": "resp", "sources": []}
+                mock_verifier.return_value = {"verification_status": "verified"}
 
-                    # Verify state is propagated
-                    assert "query" in result
-                    assert "entities" in result
-                    assert "retrieved_count" in result
+                result = await query_with_agents(query)
+
+                # Verify state is propagated and added to result
+                assert "query" in result
+                assert "entities" in result
+                assert result["entities"] == ["test"]
+                assert result["retrieved_count"] == 1
 
 
 @pytest.mark.asyncio

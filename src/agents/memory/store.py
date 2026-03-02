@@ -112,10 +112,11 @@ class MemoryStore:
                 data.append({"vector": vector, "text": text, "timestamp": timestamp})
 
             if data:
-                self.db.create_table(self.table_name, data)
+                self.db.create_table(self.table_name, data, mode="overwrite")
                 logger.info(f"Re-indexed {len(data)} findings in LanceDB")
         except Exception as e:
-            logger.error(f"Failed to re-index LanceDB: {e}")
+            # Table creation might still fail due to race conditions or DB locks
+            logger.debug(f"Non-fatal error during LanceDB re-indexing: {e}")
 
     def append_research_finding(self, finding: str) -> None:
         """Append a research finding to long-term memory.

@@ -77,6 +77,7 @@ class BaseAgentState(TypedDict):
     # LangGraph message history (auto-annotated for automatic reduction)
     # -------------------------------------------------------------------------
     messages: Annotated[list, add_messages]
+    iteration_count: int  # Track loops to prevent infinite refinement
 
 
 class ResearchState(BaseAgentState):

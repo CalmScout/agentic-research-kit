@@ -62,27 +62,43 @@ class ToolRegistry:
         # Phoenix/OpenTelemetry Tracing
         try:
             from opentelemetry import trace
-            from opentelemetry.trace import SpanKind
+            from opentelemetry.trace import SpanKind, StatusCode
 
             tracer = trace.get_tracer(__name__)
+            # Use OpenInference semantic conventions for Phoenix
             with tracer.start_as_current_span(
                 f"tool:{name}",
-                kind=SpanKind.CLIENT,
-                attributes={"tool.name": name, "tool.params": json.dumps(params)},
+                kind=SpanKind.INTERNAL,
+                attributes={
+                    "tool.name": name,
+                    "input.value": json.dumps(params, ensure_ascii=False),
+                    "input.mime_type": "application/json",
+                    "openinference.span.kind": "TOOL",
+                },
             ) as span:
                 errors = tool.validate_params(params)
                 if errors:
                     error_msg = f"Error: Invalid parameters for tool '{name}': " + "; ".join(errors)
                     span.set_attribute("tool.error", error_msg)
+                    span.set_status(StatusCode.ERROR, error_msg)
                     return error_msg
 
-                result = await tool.execute(**params)
-                # Cap result length in trace to avoid overhead
-                span.set_attribute(
-                    "tool.result",
-                    str(result)[:500] + "..." if len(str(result)) > 500 else str(result),
-                )
-                return result
+                try:
+                    result = await tool.execute(**params)
+                    
+                    # Cap result length in trace to avoid overhead
+                    result_str = str(result)
+                    trace_result = result_str[:1000] + "..." if len(result_str) > 1000 else result_str
+                    
+                    span.set_attribute("output.value", trace_result)
+                    span.set_attribute("output.mime_type", "text/plain")
+                    span.set_status(StatusCode.OK)
+                    return result
+                except Exception as e:
+                    error_msg = str(e)
+                    span.set_status(StatusCode.ERROR, error_msg)
+                    span.record_exception(e)
+                    raise
         except ImportError:
             # Fallback if opentelemetry is not installed
             errors = tool.validate_params(params)

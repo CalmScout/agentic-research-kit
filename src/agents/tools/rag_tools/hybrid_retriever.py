@@ -8,8 +8,8 @@ import json
 import logging
 from typing import Any
 
-from src.agents.direct_lightrag_retriever import DirectLightRAGRetriever
-from src.agents.isolated_lightrag import IsolatedLightRAG
+from src.agents.direct_lightrag_retriever import get_direct_lightrag_retriever
+from src.agents.isolated_lightrag import create_isolated_lightrag
 from src.agents.simple_retriever import simple_retriever
 
 from ..base import Tool
@@ -89,20 +89,17 @@ class HybridRetrieverTool(Tool):
         try:
             logger.info("Initializing thread-isolated LightRAG...")
 
-            # Create direct LightRAG retriever (helper for model configuration)
-            self.direct_retriever = DirectLightRAGRetriever()
+            # CRITICAL: Use singleton retriever to avoid memory stacking and reloading models
+            self.direct_retriever = get_direct_lightrag_retriever()
 
             # Use a factory function to initialize LightRAG within the worker thread.
-            # This ensures that all async workers and event loops are bound to the
-            # same thread and event loop, avoiding cross-thread async conflicts.
             def rag_factory():
                 return self.direct_retriever.get_rag()
 
-            # Wrap in thread isolation
-            self.isolated_rag = IsolatedLightRAG(
+            # Wrap in thread isolation using the singleton getter
+            self.isolated_rag = create_isolated_lightrag(
                 rag_factory,
-                max_workers=1,  # Single worker for event loop consistency
-                timeout=60.0,  # Increased timeout for complex queries
+                timeout=180.0,  # Increased timeout for complex queries
             )
 
             self._initialized = True
@@ -159,8 +156,11 @@ class HybridRetrieverTool(Tool):
                         {"content": c.strip()} for c in context_text.split("\n\n") if c.strip()
                     ]
 
+            # If still no chunks, trigger the fallback mechanism gracefully
             if not chunks:
-                raise RuntimeError("LightRAG returned no retrieved chunks")
+                logger.info("LightRAG returned no results, falling back to keyword search")
+                result_dict = await simple_retriever(query, top_k)
+                return json.dumps(result_dict)
 
             # Format chunks into documents
             documents = []
@@ -204,9 +204,8 @@ class HybridRetrieverTool(Tool):
             )
 
         except Exception as e:
-            logger.warning(
-                f"Hybrid retrieval failed: {e}, " f"falling back to keyword search", exc_info=True
-            )
+            logger.debug(f"Hybrid retrieval encountered an issue: {e}")
+            logger.info("Falling back to keyword search...")
 
             # Graceful fallback to keyword search
             try:
@@ -214,7 +213,7 @@ class HybridRetrieverTool(Tool):
                 # Ensure we return a JSON string
                 return json.dumps(result_dict)
             except Exception as fallback_error:
-                logger.error(f"Keyword fallback also failed: {fallback_error}", exc_info=True)
+                logger.error(f"Keyword fallback also failed: {fallback_error}")
                 raise RuntimeError(
                     f"Both hybrid and keyword retrieval failed. "
                     f"Hybrid error: {e}, Keyword error: {fallback_error}"
@@ -254,8 +253,9 @@ class HybridRetrieverTool(Tool):
 
     async def close(self) -> None:
         """Close tool and clean up resources."""
+        # We NO LONGER close the isolated_rag here because it is a shared singleton
+        # required for subsequent iterations of the ReAct loop.
         if self.isolated_rag:
-            logger.info("Closing thread-isolated LightRAG...")
-            self.isolated_rag.close()
+            logger.debug("Releasing HybridRetrieverTool (keeping background RAG warm)")
             self.isolated_rag = None
             self._initialized = False

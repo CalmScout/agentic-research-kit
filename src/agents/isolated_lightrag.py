@@ -3,23 +3,17 @@
 This module provides a thread-based isolation layer for LightRAG async operations,
 allowing LightRAG to work within LangGraph's async context without event loop conflicts.
 
-Problem:
-- LightRAG's embedding workers expect their own event loop
-- When called from within LangGraph's async context, the async context managers fail
-- Error: 'NoneType' object does not support the asynchronous context manager protocol
-
 Solution:
-- Run LightRAG in a separate thread with its own event loop
-- Use ThreadPoolExecutor to isolate execution contexts
-- Maintain synchronous interface for easy integration
+- Run LightRAG in a dedicated background thread with a persistent event loop
+- Use asyncio.run_coroutine_threadsafe for thread-safe interaction
+- Propagate OpenTelemetry context across threads for Phoenix observability
 """
 
 import asyncio
 import logging
+import threading
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
-from concurrent.futures import TimeoutError as FuturesTimeoutError
-from threading import local
+from concurrent.futures import Future
 from typing import Any, cast
 
 from lightrag import LightRAG, QueryParam
@@ -28,111 +22,128 @@ logger = logging.getLogger(__name__)
 
 
 class IsolatedLightRAG:
-    """Run LightRAG in isolated thread to avoid async conflicts.
+    """Run LightRAG in a dedicated background thread with a persistent event loop.
 
-    This class wraps a LightRAG instance and executes its async methods in a
-    separate thread with its own event loop, preventing conflicts with LangGraph's
-    async context.
-
-    Note: The LightRAG instance should ideally be initialized within the isolated
-    thread to avoid any event loop binding issues.
+    This ensures that LightRAG's internal async components (like PriorityQueues)
+    are always bound to the same loop, avoiding 'different event loop' errors.
     """
 
     def __init__(
-        self, rag_factory: Callable[[], LightRAG], max_workers: int = 1, timeout: float = 60.0
+        self, rag_factory: Callable[[], LightRAG], timeout: float = 180.0
     ):
         """Initialize isolated LightRAG wrapper.
 
         Args:
             rag_factory: Callable that returns a LightRAG instance.
-                         Called within the isolated thread.
-            max_workers: Maximum number of worker threads (default: 1)
-            timeout: Default timeout in seconds for async operations
+            timeout: Default timeout in seconds for operations.
         """
         self.rag_factory = rag_factory
-        self.max_workers = max_workers
         self.timeout = timeout
-        self.executor = ThreadPoolExecutor(max_workers=max_workers)
+        self.loop: asyncio.AbstractEventLoop | None = None
+        self.rag: LightRAG | None = None
+        self.thread: threading.Thread | None = None
+        self._ready = threading.Event()
 
-        # Thread-local storage for event loops and RAG instances
-        self._thread_local = local()
+        # Start the background thread
+        self._start_background_thread()
+        
+        # Wait for initialization to complete
+        if not self._ready.wait(timeout=60.0):
+            raise RuntimeError("Failed to initialize IsolatedLightRAG background thread")
 
-        logger.info(f"✓ IsolatedLightRAG initialized (workers={max_workers}, timeout={timeout}s)")
+        logger.info(f"✓ IsolatedLightRAG background thread started (timeout={timeout}s)")
 
-    def _get_thread_resources(self) -> tuple[asyncio.AbstractEventLoop, LightRAG]:
-        """Get or create event loop and RAG instance for current thread.
+    def _start_background_thread(self):
+        """Start the dedicated background thread for LightRAG."""
+        self.thread = threading.Thread(target=self._run_loop, name="LightRAGWorker", daemon=True)
+        self.thread.start()
 
-        Each thread gets its own event loop and its own RAG instance
-        to avoid event loop binding conflicts.
-
-        Returns:
-            tuple: (event_loop, rag_instance)
-        """
-        # Check if thread already has resources
-        if hasattr(self._thread_local, "loop") and self._thread_local.loop is not None:
-            loop = self._thread_local.loop
-            rag = self._thread_local.rag
-            if not loop.is_closed():
-                return loop, rag
-
-        # Create new event loop for this thread
+    def _run_loop(self):
+        """Background thread target: creates and runs an event loop."""
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
+        
         try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # Initialize RAG instance within this thread's loop
+            logger.debug("Initializing LightRAG instance in background thread...")
+            self.rag = self.rag_factory()
+            
+            # Initialize storages
+            self.loop.run_until_complete(self.rag.initialize_storages())
+            
+            # Signal that we are ready
+            self._ready.set()
+            
+            # Run the loop forever until stop is requested
+            self.loop.run_forever()
+        except Exception as e:
+            logger.error(f"Error in LightRAG background thread: {e}", exc_info=True)
+        finally:
+            # Cleanup - Safe shutdown without run_until_complete
+            self._ready.set() # Ensure we don't block __init__ on error
+            
+            try:
+                # Cancel all remaining tasks
+                for task in asyncio.all_tasks(self.loop):
+                    task.cancel()
+                
+                # Close the loop
+                self.loop.close()
+            except Exception as cleanup_err:
+                logger.debug(f"Loop cleanup notice: {cleanup_err}")
+                
+            logger.debug("LightRAG background thread exiting")
 
-        # Initialize RAG instance within this loop
-        logger.info("Initializing LightRAG instance within isolated thread...")
-        rag = self.rag_factory()
-
-        # CRITICAL: Ensure storages are initialized within this thread's event loop
-        # This creates the necessary async locks (JsonKVStorage._storage_lock)
-        # without which queries will fail with 'NoneType' object errors.
-        logger.debug("Initializing LightRAG storages in isolated thread...")
-        loop.run_until_complete(rag.initialize_storages())
-
-        # Store in thread-local storage
-        self._thread_local.loop = loop
-        self._thread_local.rag = rag
-        return loop, rag
-
-    def _run_in_thread(
-        self, coro_factory: Callable[[LightRAG], Any], timeout: float | None = None
-    ) -> Any:
-        """Run async coroutine in isolated thread.
-
-        Args:
-            coro_factory: Callable that takes a LightRAG instance and returns a coroutine
-            timeout: Timeout in seconds (uses default if None)
-
-        Returns:
-            Result of the coroutine
-        """
+    def _run_coro(self, coro_factory: Callable[[LightRAG], Any], timeout: float | None = None) -> Any:
+        """Run a coroutine in the background thread's loop."""
         if timeout is None:
             timeout = self.timeout
 
-        def run_in_thread():
-            """Execute coroutine in thread's event loop."""
-            loop, rag = self._get_thread_resources()
-            try:
-                # Create coroutine using the RAG instance bound to this thread
-                coro = coro_factory(rag)
-                return loop.run_until_complete(coro)
-            except Exception as e:
-                logger.error(f"Exception in thread loop: {e}", exc_info=True)
-                raise
+        if not self.loop or not self.rag:
+            raise RuntimeError("IsolatedLightRAG is not initialized")
 
+        # Capture current OpenTelemetry context
+        current_context = None
         try:
-            future = self.executor.submit(run_in_thread)
-            result = future.result(timeout=timeout)
-            return result
-        except FuturesTimeoutError:
-            logger.error(f"LightRAG operation timed out after {timeout}s")
-            raise TimeoutError(
-                f"LightRAG operation timed out after {timeout}s"
-            ) from FuturesTimeoutError
+            from opentelemetry import context
+            current_context = context.get_current()
+        except ImportError:
+            pass
+
+        async def wrapper():
+            """Wrapper to execute inside the background loop."""
+            # Attach parent context
+            token = None
+            if current_context:
+                try:
+                    from opentelemetry import context
+                    token = context.attach(current_context)
+                except:
+                    pass
+            
+            try:
+                # Create and await the actual coroutine
+                coro = coro_factory(self.rag)
+                return await coro
+            finally:
+                if token:
+                    try:
+                        from opentelemetry import context
+                        context.detach(token)
+                    except:
+                        pass
+
+        # Submit to the background loop
+        try:
+            # Check loop status
+            if not self.loop.is_running():
+                raise RuntimeError("Background event loop is not running")
+                
+            future: Future = asyncio.run_coroutine_threadsafe(wrapper(), self.loop)
+            return future.result(timeout=timeout)
+        except Exception as e:
+            logger.error(f"Error in background task: {e}")
+            raise
 
     def aquery_sync(
         self,
@@ -141,20 +152,8 @@ class IsolatedLightRAG:
         only_need_context: bool = False,
         timeout: float | None = None,
     ) -> Any:
-        """Synchronous wrapper for LightRAG queries (runs in isolated thread).
-
-        Args:
-            query: Query string
-            mode: Query mode ("local", "global", "hybrid")
-            only_need_context: If True, uses aquery_data for structured results
-            timeout: Timeout in seconds
-
-        Returns:
-            Query response string or dict
-        """
-        logger.debug(
-            f"IsolatedLightRAG.aquery_sync: query='{query[:50]}...', mode={mode}, only_need_context={only_need_context}"
-        )
+        """Synchronous wrapper for LightRAG queries."""
+        logger.debug(f"IsolatedLightRAG.aquery_sync: mode={mode}")
 
         def coro_factory(rag: LightRAG):
             if only_need_context:
@@ -162,85 +161,72 @@ class IsolatedLightRAG:
             else:
                 return rag.aquery(query, param=QueryParam(mode=mode))
 
-        return cast(str, self._run_in_thread(coro_factory, timeout=timeout))
+        return self._run_coro(coro_factory, timeout=timeout)
 
     def asearch_sync(self, query: str, mode: str = "hybrid", timeout: float | None = None) -> str:
-        """Synchronous wrapper for LightRAG.asearch (runs in isolated thread)."""
-        logger.debug(f"IsolatedLightRAG.asearch_sync: query='{query[:50]}...', mode={mode}")
-
+        """Synchronous wrapper for LightRAG.asearch."""
         def coro_factory(rag: LightRAG):
             return rag.asearch(query, param=QueryParam(mode=mode))
-
-        return cast(str, self._run_in_thread(coro_factory, timeout=timeout))
+        return cast(str, self._run_coro(coro_factory, timeout=timeout))
 
     def ainsert_sync(self, text: str, timeout: float | None = None) -> None:
-        """Synchronous wrapper for LightRAG.ainsert (runs in isolated thread)."""
-        logger.debug(f"IsolatedLightRAG.ainsert_sync: text length={len(text)}")
-
+        """Synchronous wrapper for LightRAG.ainsert."""
         def coro_factory(rag: LightRAG):
             return rag.ainsert(text)
-
-        self._run_in_thread(coro_factory, timeout=timeout)
+        self._run_coro(coro_factory, timeout=timeout)
 
     def close(self):
-        """Clean up resources.
-
-        Shuts down the thread pool and cleans up event loops.
-        """
-        try:
-
-            def cleanup_thread():
-                """Cleanup event loop in the worker thread."""
-                if hasattr(self._thread_local, "loop") and self._thread_local.loop is not None:
-                    loop = self._thread_local.loop
-                    if not loop.is_closed():
-                        logger.debug("Closing event loop in isolated thread...")
-                        # Cancel all pending tasks in this loop
-                        pending = asyncio.all_tasks(loop)
-                        if pending:
-                            logger.debug(
-                                f"Cancelling {len(pending)} pending tasks in isolated thread"
-                            )
-                            for task in pending:
-                                task.cancel()
-                            # Run the loop until all tasks are cancelled
-                            loop.run_until_complete(
-                                asyncio.gather(*pending, return_exceptions=True)
-                            )
-
-                        loop.close()
-                        self._thread_local.loop = None
-                        logger.debug("✓ Isolated event loop closed")
-
-            # Submit cleanup task to the executor
-            self.executor.submit(cleanup_thread)
-
-            # Shut down executor
-            self.executor.shutdown(wait=True)
+        """Shutdown the background loop and thread."""
+        if self.loop and self.loop.is_running():
+            logger.info("Stopping LightRAG background thread...")
+            # Schedule loop stop
+            self.loop.call_soon_threadsafe(self.loop.stop)
+            if self.thread:
+                self.thread.join(timeout=5.0)
             logger.info("✓ IsolatedLightRAG closed")
-        except Exception as e:
-            logger.warning(f"Error closing IsolatedLightRAG: {e}")
 
     def __enter__(self):
-        """Context manager entry."""
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        self.close()
+        # We don't close the singleton automatically
+        pass
+
+
+# Global singleton instance
+_global_isolated_rag: dict[str, IsolatedLightRAG] = {}
+
+
+def get_isolated_lightrag(
+    rag_factory: Callable[[], LightRAG], timeout: float = 180.0
+) -> IsolatedLightRAG:
+    """Get or create singleton IsolatedLightRAG instance.
+    
+    Includes a liveness check to re-initialize if the thread or loop was closed.
+    """
+    global _global_isolated_rag
+    key = "default"
+    
+    # Check if instance exists and is still healthy
+    instance = _global_isolated_rag.get(key)
+    is_healthy = (
+        instance is not None and 
+        instance.thread is not None and 
+        instance.thread.is_alive() and 
+        instance.loop is not None and 
+        instance.loop.is_running()
+    )
+    
+    if not is_healthy:
+        if instance:
+            logger.debug("Re-initializing closed or unhealthy IsolatedLightRAG singleton...")
+        _global_isolated_rag[key] = IsolatedLightRAG(rag_factory, timeout=timeout)
+        
+    return _global_isolated_rag[key]
 
 
 def create_isolated_lightrag(
     rag_factory: Callable[[], LightRAG], max_workers: int = 1, timeout: float = 60.0
 ) -> IsolatedLightRAG:
-    """Factory function to create IsolatedLightRAG instance.
-
-    Args:
-        rag_factory: Callable that returns a LightRAG instance
-        max_workers: Maximum number of worker threads
-        timeout: Default timeout in seconds
-
-    Returns:
-        IsolatedLightRAG: Wrapped instance ready for use
-    """
-    return IsolatedLightRAG(rag_factory, max_workers=max_workers, timeout=timeout)
+    """Factory function (backward compatible, ignores max_workers)."""
+    return get_isolated_lightrag(rag_factory, timeout=timeout)

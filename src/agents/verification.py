@@ -15,12 +15,15 @@ from src.agents.base_state import BaseAgentState
 from src.agents.enhanced_response_generator import format_sources_for_prompt
 from src.agents.model_selector import get_model_selector
 
-VERIFICATION_PROMPT = """You are an expert fact-checker and hallucination detector.
+VERIFICATION_PROMPT = """You are an expert fact-checker and research validator.
 Your job is to verify that a generated response is fully supported by the provided source documents.
 
-You must identify any claims in the Response that are NOT explicitly stated in the Sources.
-If the Response contains hallucinations or fabrications, you must provide a 'corrected_response'
-that removes those unsupported claims. If the Response is fully supported, return the exact same response.
+You must identify:
+1. Claims in the Response that are NOT explicitly stated in the Sources (Hallucinations).
+2. Missing information that was requested in the Query but not found in the Sources (Research Gaps).
+
+If the Response contains hallucinations, provide a 'corrected_response'.
+If there are significant 'research_gaps' that prevent a complete answer, set 'is_verified' to false and explain what is missing in 'feedback'.
 
 ## Query
 {query}
@@ -32,16 +35,17 @@ that removes those unsupported claims. If the Response is fully supported, retur
 {response}
 
 Return your analysis as a JSON object with the following keys:
-- "is_verified": true if the response is fully supported, false if it contains hallucinations.
-- "feedback": A brief explanation of what was fabricated or why it passed.
-- "corrected_response": The original response with hallucinations removed (or the original if perfectly fine). Do NOT change the tone or formatting unnecessarily.
+- "is_verified": true if the response is fully supported and complete, false if it contains hallucinations or significant research gaps.
+- "needs_refinement": true if we should loop back to the retriever to find more information, false if we should just show the corrected response.
+- "feedback": A brief explanation of what was fabricated or what specific information is still missing.
+- "corrected_response": The original response with hallucinations removed (or the original if perfectly fine).
 
 **IMPORTANT**: Respond with ONLY valid JSON, no markdown fences.
 """
 
 
 async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
-    """Verification Agent to critique and fix hallucinations in the generated response.
+    """Verification Agent to critique and fix hallucinations or identify research gaps.
 
     Args:
         state: Current agent state containing query, sources, and generated response.
@@ -52,20 +56,29 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
     query = state.get("query", "")
     response_text = cast(str, state.get("response", ""))
     sources = state.get("sources", [])
+    
+    # Track iterations to prevent infinite loops
+    iteration_count = state.get("iteration_count", 0)
+    logger.info(f"Verification Agent (Iteration {iteration_count + 1}): Analyzing response...")
 
-    logger.info("Verification Agent: Analyzing generated response against sources...")
-
-    # If no sources were retrieved or no response, just pass it through
+    # If no sources were retrieved or no response, and it's within retry limit
     if not sources or not response_text:
-        logger.info("Verification Agent: Skipped (no sources or empty response)")
-        return {
-            "verification_status": "skipped",
-            "verification_feedback": "No sources or response to verify.",
-        }
+        if iteration_count < 2:
+            logger.info("Verification Agent: No sources/response, requesting refinement...")
+            return {
+                "verification_status": "refine",
+                "verification_feedback": "Initial retrieval yielded no results. Need broader search.",
+                "iteration_count": iteration_count + 1,
+            }
+        else:
+            return {
+                "verification_status": "failed",
+                "verification_feedback": "Exhausted retry limit with no results.",
+                "iteration_count": iteration_count + 1,
+            }
 
     try:
         model_selector = get_model_selector()
-        # Use a strong local LLM or fallback for fact checking
         llm = model_selector.get_llm_with_fallback()
 
         sources_text = format_sources_for_prompt(sources)
@@ -73,14 +86,14 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
             query=query, sources_text=sources_text, response=response_text
         )
 
-        messages = [
+        llm_messages = [
             SystemMessage(
                 content="You are a strict verification and fact-checking AI. Output only JSON."
             ),
             HumanMessage(content=prompt),
         ]
 
-        llm_response = await llm.ainvoke(messages)
+        llm_response = await llm.ainvoke(llm_messages)
         text = cast(str, llm_response.content).strip()
 
         # Clean up JSON
@@ -90,12 +103,21 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
         result = cast(dict[str, Any], json_repair.loads(text))
 
         is_verified = result.get("is_verified", True)
+        needs_refinement = result.get("needs_refinement", False)
         feedback = result.get("feedback", "No issues detected.")
         corrected_response = result.get("corrected_response", response_text)
 
-        status = "verified" if is_verified else "corrected"
+        # Determine status - allow max 2 refinements (3 total passes)
+        if is_verified:
+            status = "verified"
+        elif needs_refinement and iteration_count < 2:
+            status = "refine"
+        else:
+            status = "corrected"
 
-        if not is_verified:
+        if status == "refine":
+            logger.warning(f"Verification requested REFINEMENT. Feedback: {feedback}")
+        elif status == "corrected":
             logger.warning(f"Verification Failed. Correcting response. Feedback: {feedback}")
         else:
             logger.info("✓ Response verified successfully.")
@@ -104,6 +126,7 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
             "response": corrected_response,
             "verification_status": status,
             "verification_feedback": feedback,
+            "iteration_count": iteration_count + 1,
         }
 
     except Exception as e:
@@ -112,4 +135,5 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
         return {
             "verification_status": "error",
             "verification_feedback": f"Verification encountered an error: {str(e)}",
+            "iteration_count": iteration_count + 1,
         }

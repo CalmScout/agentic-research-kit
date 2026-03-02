@@ -74,18 +74,32 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
                 await connect_mcp_servers(mcp_configs, registry, stack)
 
             # -------------------------------------------------------------
-            # Step 1: Detect query type
+            # Step 1: Detect query type and analyze verification feedback
             # -------------------------------------------------------------
             query_type = "multimodal" if query_image else "text"
+            
+            # If this is a refinement loop, use feedback to enhance the query
+            verification_feedback = state.get("verification_feedback")
+            active_query = query
+            if verification_feedback and state.get("verification_status") == "refine":
+                logger.info("Refinement Loop: Enhancing query based on verification feedback")
+                # Extract the core gap from feedback to keep the query focused
+                active_query = f"{query} (Missing: {verification_feedback[:200]})"
+            
             logger.debug(f"Query type: {query_type}")
 
             # -------------------------------------------------------------
             # Step 2: Extract entities via tool
             # -------------------------------------------------------------
-            entities_result = await registry.execute("entity_extractor", {"text": query})
+            entities_result = await registry.execute("entity_extractor", {"text": active_query})
             entities = json.loads(entities_result)
+            
+            # CRITICAL: Limit entities to 3 to prevent embedding blowout and memory exhaustion
+            if len(entities) > 3:
+                logger.debug(f"Limiting {len(entities)} extracted entities to top 3")
+                entities = entities[:3]
 
-            logger.debug(f"Extracted {len(entities)} entities: {entities}")
+            logger.debug(f"Active entities: {entities}")
 
             # -------------------------------------------------------------
             # Step 3: Generate query embedding
@@ -117,7 +131,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             retrieval_method = retrieval_data.get("retrieval_method", "keyword")
 
             logger.info(
-                f"Retrieved {len(retrieved_docs)} documents from local RAG using {retrieval_method} (mode={retrieval_mode})"
+                f"Retrieved {len(retrieved_docs)} documents from local RAG using {retrieval_method}"
             )
 
             # -------------------------------------------------------------
@@ -169,13 +183,13 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # -------------------------------------------------------------
             # Step 6: Proactive Background Research
             # -------------------------------------------------------------
-            # Trigger deep-dives for entities that seem highly relevant but have low coverage
-            if (
-                entities and settings.llm_mode == "api"
-            ):  # Only do this in API mode to avoid overloading local model
-                for entity in entities[:2]:  # Max 2 deep dives per query
+            # CRITICAL: Only trigger deep-dives if NOT in local mode to avoid overloading CPU/RAM
+            if entities and settings.llm_mode != "local":
+                for entity in entities[:2]:  # Max 2 deep dives
                     logger.info(f"Triggering proactive deep-dive for: {entity}")
                     await registry.execute("entity_deep_dive", {"entity": entity})
+            elif entities and settings.llm_mode == "local":
+                logger.debug("Skipping proactive deep-dives in local mode to conserve resources")
 
             # -------------------------------------------------------------
             # Return updated state

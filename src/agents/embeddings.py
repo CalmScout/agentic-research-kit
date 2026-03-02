@@ -44,19 +44,40 @@ class EmbeddingService:
         """
         try:
             from opentelemetry import trace
+            from opentelemetry.trace import StatusCode
 
             tracer = trace.get_tracer(__name__)
-            with tracer.start_as_current_span("embed_text") as span:
-                span.set_attribute("text_length", len(text))
+            # Use OpenInference semantic conventions for Phoenix
+            with tracer.start_as_current_span(
+                "embed_text",
+                attributes={
+                    "input.value": text[:1000] + "..." if len(text) > 1000 else text,
+                    "input.mime_type": "text/plain",
+                    "openinference.span.kind": "EMBEDDING",
+                    "embedding.model_name": self.settings.embedding_model,
+                },
+            ) as span:
                 model = self._get_model()
                 embedding = model.embed_text(text)
-                return cast(list[float], embedding.tolist())
+                result = cast(list[float], embedding.tolist())
+                
+                # We don't log the full vector to avoid overhead, just dimensionality
+                span.set_attribute("output.value", f"vector(dim={len(result)})")
+                span.set_status(StatusCode.OK)
+                return result
         except ImportError:
             model = self._get_model()
             embedding = model.embed_text(text)
             return cast(list[float], embedding.tolist())
         except Exception as e:
             logger.error(f"Failed to generate text embedding: {e}")
+            try:
+                from opentelemetry.trace import StatusCode
+                span = trace.get_current_span()
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+            except:
+                pass
             raise
 
     def embed_image(self, image_path: str) -> list[float]:
@@ -70,19 +91,37 @@ class EmbeddingService:
         """
         try:
             from opentelemetry import trace
+            from opentelemetry.trace import StatusCode
 
             tracer = trace.get_tracer(__name__)
-            with tracer.start_as_current_span("embed_image") as span:
-                span.set_attribute("image_path", image_path)
+            with tracer.start_as_current_span(
+                "embed_image",
+                attributes={
+                    "input.value": image_path,
+                    "openinference.span.kind": "EMBEDDING",
+                    "embedding.model_name": self.settings.embedding_model,
+                },
+            ) as span:
                 model = self._get_model()
                 embedding = model.embed_image(image_path)
-                return cast(list[float], embedding.tolist())
+                result = cast(list[float], embedding.tolist())
+                
+                span.set_attribute("output.value", f"vector(dim={len(result)})")
+                span.set_status(StatusCode.OK)
+                return result
         except ImportError:
             model = self._get_model()
             embedding = model.embed_image(image_path)
             return cast(list[float], embedding.tolist())
         except Exception as e:
             logger.error(f"Failed to generate image embedding: {e}")
+            try:
+                from opentelemetry.trace import StatusCode
+                span = trace.get_current_span()
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+            except:
+                pass
             raise
 
     def embed_multimodal(self, text: str, image_path: str | None = None) -> list[float]:
@@ -121,18 +160,31 @@ class EmbeddingService:
         """
         try:
             from opentelemetry import trace
+            from opentelemetry.trace import StatusCode
 
             tracer = trace.get_tracer(__name__)
-            with tracer.start_as_current_span("embed_batch") as span:
-                span.set_attribute("batch_size", len(texts))
+            with tracer.start_as_current_span(
+                "embed_batch",
+                attributes={
+                    "input.value": f"batch_size={len(texts)}",
+                    "openinference.span.kind": "EMBEDDING",
+                    "embedding.model_name": self.settings.embedding_model,
+                },
+            ) as span:
                 model = self._get_model()
                 # Handle model batching if supported
                 if hasattr(model, "embed_text_batch"):
                     embeddings = model.embed_text_batch(texts)
-                    return cast(list[list[float]], embeddings.tolist())
+                    result = cast(list[list[float]], embeddings.tolist())
+                    span.set_attribute("output.value", f"batch_vectors(count={len(result)})")
+                    span.set_status(StatusCode.OK)
+                    return result
                 else:
                     embeddings = [self.embed_text(text) for text in texts]
-                    return cast(list[list[float]], embeddings)
+                    result = cast(list[list[float]], embeddings)
+                    span.set_attribute("output.value", f"batch_vectors(count={len(result)})")
+                    span.set_status(StatusCode.OK)
+                    return result
         except ImportError:
             model = self._get_model()
             if hasattr(model, "embed_text_batch"):
@@ -143,6 +195,13 @@ class EmbeddingService:
                 return cast(list[list[float]], embeddings)
         except Exception as e:
             logger.error(f"Failed to embed batch: {e}")
+            try:
+                from opentelemetry.trace import StatusCode
+                span = trace.get_current_span()
+                span.set_status(StatusCode.ERROR, str(e))
+                span.record_exception(e)
+            except:
+                pass
             raise
 
 

@@ -5,6 +5,7 @@ It uses local Qwen3-VL embedding models for query embedding and retrieval.
 """
 
 import logging
+import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, cast
@@ -104,10 +105,14 @@ class DirectLightRAGRetriever:
             2D Numpy array with shape (num_texts, embedding_dim)
         """
         embedding_model = self._get_embedding_model()
+        
+        # Optimization: LightRAG's internal workers can cause multiple accesses
+        # We ensure thread-safe single-threaded execution here
         embeddings = []
 
         for text in texts:
             try:
+                # Direct call to singleton which is already instrumented for Phoenix
                 embedding = embedding_model.embed_text(text)
                 embeddings.append(embedding)
             except Exception as e:
@@ -123,14 +128,6 @@ class DirectLightRAGRetriever:
 
         Returns an async function that LightRAG can call for entity extraction
         and knowledge graph operations during queries.
-
-        The function signature must match LightRAG's expectations:
-            async def llm_model_func(
-                prompt: str,
-                system_prompt: str | None = None,
-                history_messages: list[Any] | None = None,
-                **kwargs
-            ) -> str
         """
 
         async def llm_model_func(
@@ -150,7 +147,6 @@ class DirectLightRAGRetriever:
                     logger.info("✓ LightRAG LLM initialized")
 
                 # Generate response using sync call in async context
-                # The Qwen2TextLLM.generate() is synchronous, so we can call it directly
                 response = self._llm.generate(
                     prompt=prompt, system_prompt=system_prompt, temperature=0.0, max_tokens=512
                 )
@@ -158,7 +154,6 @@ class DirectLightRAGRetriever:
 
             except Exception as e:
                 logger.error(f"LLM function error: {e}", exc_info=True)
-                # Return fallback for entity extraction
                 return ""
 
         return llm_model_func
@@ -174,7 +169,11 @@ class DirectLightRAGRetriever:
                 f"Initializing LightRAG with local models (working_dir: {self.working_dir})"
             )
 
-            # Create embedding function
+            # CRITICAL: Force LightRAG to use a single background worker for embeddings
+            # This prevents memory explosion when multiple entities are embedded
+            os.environ["EMBEDDING_FUNC_MAX_ASYNC"] = "1"
+
+            # Create embedding function. 
             embedding_func = EmbeddingFunc(
                 embedding_dim=2048,  # Qwen3-VL-Embedding-2B dimension
                 max_token_size=8192,
@@ -184,7 +183,7 @@ class DirectLightRAGRetriever:
             # Create LLM function for entity extraction
             llm_model_func = self._create_llm_model_func()
 
-            # Initialize LightRAG with both embedding and LLM functions
+            # Initialize LightRAG
             self._rag = LightRAG(
                 working_dir=str(self.working_dir),
                 llm_model_func=llm_model_func,
@@ -192,50 +191,29 @@ class DirectLightRAGRetriever:
                 kv_storage="LanceDBKVStorage",
                 doc_status_storage="LanceDBDocStatusStorage",
                 vector_storage="LanceDBVectorDBStorage",
+                embedding_batch_num=1,  # Force sequential embedding to save RAM
+                embedding_func_max_async=1,  # CRITICAL: Fix for the "8 workers" issue
             )
 
-            logger.info("✓ LightRAG initialized successfully")
+            logger.info("✓ LightRAG initialized successfully (EMBEDDING_FUNC_MAX_ASYNC=1)")
 
         return self._rag
 
     async def retrieve(self, query: str, top_k: int = 50, mode: str = "naive") -> dict[str, Any]:
-        """Retrieve documents using LightRAG.
-
-        Args:
-            query: User query
-            top_k: Number of documents to retrieve
-            mode: Retrieval mode ("naive", "local", "global", "hybrid")
-
-        Returns:
-            Dict with keys: retrieved_docs, retrieval_scores, retrieval_method
-        """
+        """Retrieve documents using LightRAG."""
         rag = self.get_rag()
 
         logger.info(f"Querying LightRAG directly (mode={mode}, top_k={top_k})")
 
         try:
-            # Perform retrieval using LightRAG
-            # Use aquery_data for structured retrieval results
             result = await rag.aquery_data(query, param=QueryParam(mode=mode))
 
-            # Parse result to extract documents
-            # aquery_data returns: {"status": "success", "data": {"chunks": [...], ...}}
             documents = []
             scores = []
 
             if isinstance(result, dict):
                 data = result.get("data", {})
                 chunks = data.get("chunks", [])
-
-                # Support old format if needed
-                if not chunks and "context" in result:
-                    context = result["context"]
-                    if isinstance(context, list):
-                        chunks = context
-                    elif isinstance(context, str):
-                        chunks = [
-                            {"content": c.strip()} for c in context.split("\n\n") if c.strip()
-                        ]
 
                 for i, item in enumerate(chunks):
                     if isinstance(item, dict):
@@ -272,11 +250,7 @@ _retriever: DirectLightRAGRetriever | None = None
 
 
 def get_direct_lightrag_retriever() -> DirectLightRAGRetriever:
-    """Get singleton direct LightRAG retriever instance.
-
-    Returns:
-        DirectLightRAGRetriever: Shared retriever instance
-    """
+    """Get singleton direct LightRAG retriever instance."""
     global _retriever
     if _retriever is None:
         _retriever = DirectLightRAGRetriever()

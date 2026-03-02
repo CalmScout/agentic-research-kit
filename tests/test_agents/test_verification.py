@@ -68,16 +68,18 @@ async def test_verification_agent_skipped():
     state_no_sources: BaseAgentState = {
         "query": "Test",
         "response": "Test response",
-        "sources": []
+        "sources": [],
+        "iteration_count": 0
     }
     result = await verification_agent(state_no_sources)
-    assert result["verification_status"] == "skipped"
-
+    assert result["verification_status"] == "refine"
+    assert "Initial retrieval yielded no results" in result["verification_feedback"]
     # No response
     state_no_response: BaseAgentState = {
         "query": "Test",
         "response": "",
-        "sources": [{"text": "source"}]
+        "sources": [{"text": "source"}],
+        "iteration_count": 0
     }
     result = await verification_agent(state_no_response)
-    assert result["verification_status"] == "skipped"
+    assert result["verification_status"] == "refine"

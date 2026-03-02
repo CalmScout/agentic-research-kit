@@ -105,7 +105,7 @@ class DirectLightRAGRetriever:
             2D Numpy array with shape (num_texts, embedding_dim)
         """
         embedding_model = self._get_embedding_model()
-        
+
         # Optimization: LightRAG's internal workers can cause multiple accesses
         # We ensure thread-safe single-threaded execution here
         embeddings = []
@@ -173,7 +173,7 @@ class DirectLightRAGRetriever:
             # This prevents memory explosion when multiple entities are embedded
             os.environ["EMBEDDING_FUNC_MAX_ASYNC"] = "1"
 
-            # Create embedding function. 
+            # Create embedding function.
             embedding_func = EmbeddingFunc(
                 embedding_dim=2048,  # Qwen3-VL-Embedding-2B dimension
                 max_token_size=8192,

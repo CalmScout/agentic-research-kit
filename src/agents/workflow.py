@@ -51,8 +51,8 @@ def _initialize_phoenix():
 
     try:
         from openinference.instrumentation.langchain import LangChainInstrumentor
-        from phoenix.otel import register as phoenix_register
         from opentelemetry import trace
+        from phoenix.otel import register as phoenix_register
 
         # Get collector endpoint from env or use default
         collector_endpoint = os.getenv(
@@ -66,7 +66,7 @@ def _initialize_phoenix():
             project_name="agentic-research-kit",
             endpoint=collector_endpoint,
         )
-        
+
         # CRITICAL: Set as global tracer provider
         trace.set_tracer_provider(_tracer_provider)
 
@@ -128,15 +128,19 @@ def create_multi_agent_workflow():
     def router(state: BaseAgentState):
         status = state.get("verification_status")
         iteration_count = state.get("iteration_count", 0)
-        
+
         # Max 2 refinements (3 total iterations)
         if status == "refine" and iteration_count < 3:
-            logger.info(f"↺ ReAct Loop: Verification requested refinement (Iteration {iteration_count}). Back to Retriever.")
+            logger.info(
+                f"↺ ReAct Loop: Verification requested refinement (Iteration {iteration_count}). Back to Retriever."
+            )
             return "enhanced_retriever"
-        
+
         if iteration_count >= 3:
-            logger.warning(f"⚠ ReAct Loop: Maximum iterations ({iteration_count}) reached. Ending research.")
-            
+            logger.warning(
+                f"⚠ ReAct Loop: Maximum iterations ({iteration_count}) reached. Ending research."
+            )
+
         return END
 
     workflow.add_conditional_edges(
@@ -230,17 +234,17 @@ async def query_with_agents(
             "verification_status": None,
             "verification_feedback": None,
             "messages": [],  # LangGraph message history
-            "iteration_count": 0, # Track loops to prevent infinite refinement
+            "iteration_count": 0,  # Track loops to prevent infinite refinement
         }
 
         # Execute workflow
         logger.info("Invoking workflow...")
-        
+
         # Phoenix Root Span
         if _phoenix_initialized:
             from opentelemetry import trace
             from opentelemetry.trace import SpanKind, StatusCode
-            
+
             tracer = trace.get_tracer(__name__)
             with tracer.start_as_current_span(
                 "query_with_agents",
@@ -250,25 +254,25 @@ async def query_with_agents(
                     "input.mime_type": "text/plain",
                     "openinference.span.kind": "CHAIN",
                     "retrieval_mode": retrieval_mode,
-                }
+                },
             ) as span:
                 # Set recursion limit to 10 nodes total
                 result = await workflow.ainvoke(initial_state, {"recursion_limit": 10})
-                
+
                 # Capture final result
                 response = result.get("response", "")
                 span.set_attribute("output.value", response)
                 span.set_attribute("output.mime_type", "text/plain")
-                
+
                 # Capture trace ID
                 trace_id = span.get_span_context().trace_id
                 result["phoenix_trace_id"] = f"{trace_id:032x}"
-                
+
                 if result.get("verification_status") == "FAIL":
                     span.set_status(StatusCode.ERROR, "Verification failed")
                 else:
                     span.set_status(StatusCode.OK)
-            
+
             # Force flush spans to ensure they appear in Phoenix
             if _tracer_provider:
                 _tracer_provider.force_flush()

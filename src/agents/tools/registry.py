@@ -85,11 +85,13 @@ class ToolRegistry:
 
                 try:
                     result = await tool.execute(**params)
-                    
+
                     # Cap result length in trace to avoid overhead
                     result_str = str(result)
-                    trace_result = result_str[:1000] + "..." if len(result_str) > 1000 else result_str
-                    
+                    trace_result = (
+                        result_str[:1000] + "..." if len(result_str) > 1000 else result_str
+                    )
+
                     span.set_attribute("output.value", trace_result)
                     span.set_attribute("output.mime_type", "text/plain")
                     span.set_status(StatusCode.OK)

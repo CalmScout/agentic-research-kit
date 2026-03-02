@@ -56,7 +56,7 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
     query = state.get("query", "")
     response_text = cast(str, state.get("response", ""))
     sources = state.get("sources", [])
-    
+
     # Track iterations to prevent infinite loops
     iteration_count = state.get("iteration_count", 0)
     logger.info(f"Verification Agent (Iteration {iteration_count + 1}): Analyzing response...")

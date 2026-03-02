@@ -29,15 +29,20 @@ class IsolatedLightRAG:
     """
 
     def __init__(
-        self, rag_factory: Callable[[], LightRAG], timeout: float = 180.0
+        self,
+        rag_factory: Callable[[], LightRAG],
+        max_workers: int = 1,
+        timeout: float = 180.0,
     ):
         """Initialize isolated LightRAG wrapper.
 
         Args:
             rag_factory: Callable that returns a LightRAG instance.
+            max_workers: Unused, kept for backward compatibility.
             timeout: Default timeout in seconds for operations.
         """
         self.rag_factory = rag_factory
+        self.max_workers = max_workers
         self.timeout = timeout
         self.loop: asyncio.AbstractEventLoop | None = None
         self.rag: LightRAG | None = None
@@ -46,7 +51,7 @@ class IsolatedLightRAG:
 
         # Start the background thread
         self._start_background_thread()
-        
+
         # Wait for initialization to complete
         if not self._ready.wait(timeout=60.0):
             raise RuntimeError("Failed to initialize IsolatedLightRAG background thread")
@@ -62,39 +67,41 @@ class IsolatedLightRAG:
         """Background thread target: creates and runs an event loop."""
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
-        
+
         try:
             # Initialize RAG instance within this thread's loop
             logger.debug("Initializing LightRAG instance in background thread...")
             self.rag = self.rag_factory()
-            
+
             # Initialize storages
             self.loop.run_until_complete(self.rag.initialize_storages())
-            
+
             # Signal that we are ready
             self._ready.set()
-            
+
             # Run the loop forever until stop is requested
             self.loop.run_forever()
         except Exception as e:
             logger.error(f"Error in LightRAG background thread: {e}", exc_info=True)
         finally:
             # Cleanup - Safe shutdown without run_until_complete
-            self._ready.set() # Ensure we don't block __init__ on error
-            
+            self._ready.set()  # Ensure we don't block __init__ on error
+
             try:
                 # Cancel all remaining tasks
                 for task in asyncio.all_tasks(self.loop):
                     task.cancel()
-                
+
                 # Close the loop
                 self.loop.close()
             except Exception as cleanup_err:
                 logger.debug(f"Loop cleanup notice: {cleanup_err}")
-                
+
             logger.debug("LightRAG background thread exiting")
 
-    def _run_coro(self, coro_factory: Callable[[LightRAG], Any], timeout: float | None = None) -> Any:
+    def _run_coro(
+        self, coro_factory: Callable[[LightRAG], Any], timeout: float | None = None
+    ) -> Any:
         """Run a coroutine in the background thread's loop."""
         if timeout is None:
             timeout = self.timeout
@@ -106,6 +113,7 @@ class IsolatedLightRAG:
         current_context = None
         try:
             from opentelemetry import context
+
             current_context = context.get_current()
         except ImportError:
             pass
@@ -117,10 +125,11 @@ class IsolatedLightRAG:
             if current_context:
                 try:
                     from opentelemetry import context
+
                     token = context.attach(current_context)
-                except:
+                except Exception:
                     pass
-            
+
             try:
                 # Create and await the actual coroutine
                 coro = coro_factory(self.rag)
@@ -129,8 +138,9 @@ class IsolatedLightRAG:
                 if token:
                     try:
                         from opentelemetry import context
+
                         context.detach(token)
-                    except:
+                    except Exception:
                         pass
 
         # Submit to the background loop
@@ -138,7 +148,7 @@ class IsolatedLightRAG:
             # Check loop status
             if not self.loop.is_running():
                 raise RuntimeError("Background event loop is not running")
-                
+
             future: Future = asyncio.run_coroutine_threadsafe(wrapper(), self.loop)
             return future.result(timeout=timeout)
         except Exception as e:
@@ -165,14 +175,18 @@ class IsolatedLightRAG:
 
     def asearch_sync(self, query: str, mode: str = "hybrid", timeout: float | None = None) -> str:
         """Synchronous wrapper for LightRAG.asearch."""
+
         def coro_factory(rag: LightRAG):
             return rag.asearch(query, param=QueryParam(mode=mode))
+
         return cast(str, self._run_coro(coro_factory, timeout=timeout))
 
     def ainsert_sync(self, text: str, timeout: float | None = None) -> None:
         """Synchronous wrapper for LightRAG.ainsert."""
+
         def coro_factory(rag: LightRAG):
             return rag.ainsert(text)
+
         self._run_coro(coro_factory, timeout=timeout)
 
     def close(self):
@@ -201,27 +215,27 @@ def get_isolated_lightrag(
     rag_factory: Callable[[], LightRAG], timeout: float = 180.0
 ) -> IsolatedLightRAG:
     """Get or create singleton IsolatedLightRAG instance.
-    
+
     Includes a liveness check to re-initialize if the thread or loop was closed.
     """
     global _global_isolated_rag
     key = "default"
-    
+
     # Check if instance exists and is still healthy
     instance = _global_isolated_rag.get(key)
     is_healthy = (
-        instance is not None and 
-        instance.thread is not None and 
-        instance.thread.is_alive() and 
-        instance.loop is not None and 
-        instance.loop.is_running()
+        instance is not None
+        and instance.thread is not None
+        and instance.thread.is_alive()
+        and instance.loop is not None
+        and instance.loop.is_running()
     )
-    
+
     if not is_healthy:
         if instance:
             logger.debug("Re-initializing closed or unhealthy IsolatedLightRAG singleton...")
         _global_isolated_rag[key] = IsolatedLightRAG(rag_factory, timeout=timeout)
-        
+
     return _global_isolated_rag[key]
 
 

@@ -60,7 +60,7 @@ class EmbeddingService:
                 model = self._get_model()
                 embedding = model.embed_text(text)
                 result = cast(list[float], embedding.tolist())
-                
+
                 # We don't log the full vector to avoid overhead, just dimensionality
                 span.set_attribute("output.value", f"vector(dim={len(result)})")
                 span.set_status(StatusCode.OK)
@@ -73,10 +73,11 @@ class EmbeddingService:
             logger.error(f"Failed to generate text embedding: {e}")
             try:
                 from opentelemetry.trace import StatusCode
+
                 span = trace.get_current_span()
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            except:
+            except Exception:
                 pass
             raise
 
@@ -105,7 +106,7 @@ class EmbeddingService:
                 model = self._get_model()
                 embedding = model.embed_image(image_path)
                 result = cast(list[float], embedding.tolist())
-                
+
                 span.set_attribute("output.value", f"vector(dim={len(result)})")
                 span.set_status(StatusCode.OK)
                 return result
@@ -117,10 +118,11 @@ class EmbeddingService:
             logger.error(f"Failed to generate image embedding: {e}")
             try:
                 from opentelemetry.trace import StatusCode
+
                 span = trace.get_current_span()
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            except:
+            except Exception:
                 pass
             raise
 
@@ -197,10 +199,11 @@ class EmbeddingService:
             logger.error(f"Failed to embed batch: {e}")
             try:
                 from opentelemetry.trace import StatusCode
+
                 span = trace.get_current_span()
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
-            except:
+            except Exception:
                 pass
             raise
 

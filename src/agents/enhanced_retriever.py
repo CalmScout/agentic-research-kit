@@ -77,7 +77,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # Step 1: Detect query type and analyze verification feedback
             # -------------------------------------------------------------
             query_type = "multimodal" if query_image else "text"
-            
+
             # If this is a refinement loop, use feedback to enhance the query
             verification_feedback = state.get("verification_feedback")
             active_query = query
@@ -85,7 +85,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
                 logger.info("Refinement Loop: Enhancing query based on verification feedback")
                 # Extract the core gap from feedback to keep the query focused
                 active_query = f"{query} (Missing: {verification_feedback[:200]})"
-            
+
             logger.debug(f"Query type: {query_type}")
 
             # -------------------------------------------------------------
@@ -93,7 +93,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # -------------------------------------------------------------
             entities_result = await registry.execute("entity_extractor", {"text": active_query})
             entities = json.loads(entities_result)
-            
+
             # CRITICAL: Limit entities to 3 to prevent embedding blowout and memory exhaustion
             if len(entities) > 3:
                 logger.debug(f"Limiting {len(entities)} extracted entities to top 3")

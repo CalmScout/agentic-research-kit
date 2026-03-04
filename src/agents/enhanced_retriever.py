@@ -152,10 +152,16 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
 
             avg_score = sum(retrieval_scores) / len(retrieval_scores) if retrieval_scores else 0
 
-            should_trigger_web = (len(retrieved_docs) < 5 or avg_score < 0.4) and settings.brave_api_key
+            should_trigger_web = (
+                len(retrieved_docs) < 5 or avg_score < 0.4
+            ) and settings.brave_api_key
 
             if should_trigger_web:
-                reason = "Insufficient local results" if len(retrieved_docs) < 5 else f"Low quality local results (avg score: {avg_score:.2f})"
+                reason = (
+                    "Insufficient local results"
+                    if len(retrieved_docs) < 5
+                    else f"Low quality local results (avg score: {avg_score:.2f})"
+                )
                 logger.info(f"{reason}, triggering web search...")
                 search_result = await registry.execute("web_search", {"query": query, "count": 5})
 

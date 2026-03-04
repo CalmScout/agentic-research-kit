@@ -468,7 +468,7 @@ def create_evaluator_from_settings(
             logger.info("Using local Qwen3-8B for RAGAS evaluation")
         except Exception as e:
             raise ImportError(
-                f"Failed to load local model: {e}. " "Ensure Ollama is running with Qwen3-8B"
+                f"Failed to load local model: {e}. " "Ensure local model is available"
             ) from e
     else:
         raise ValueError(

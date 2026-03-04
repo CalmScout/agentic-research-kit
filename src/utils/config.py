@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Multi-Provider LLM Configuration
     # -------------------------------------------------------------------------
-    llm_provider: Literal["deepseek", "openai", "ollama", "local"] = Field(
+    llm_provider: Literal["deepseek", "openai", "local"] = Field(
         default="deepseek", description="Primary LLM provider"
     )
     llm_mode: Literal["api", "local"] = Field(
@@ -53,14 +53,6 @@ class Settings(BaseSettings):
     openai_api_key: str | None = Field(
         default=None, description="OpenAI API key (optional, for provider=openai)"
     )
-
-    # -------------------------------------------------------------------------
-    # Ollama Configuration
-    # -------------------------------------------------------------------------
-    ollama_base_url: str = Field(
-        default="http://localhost:11434", description="Ollama API base URL"
-    )
-    ollama_model: str = Field(default="llama3:8b", description="Ollama model name")
 
     # -------------------------------------------------------------------------
     # HuggingFace Configuration

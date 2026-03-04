@@ -84,14 +84,8 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.optional-dependencies]
-ollama = [
-    { name = "langchain-community" },
-]
-
 [package.dev-dependencies]
 dev = [
-    { name = "agentic-research-kit", extra = ["ollama"] },
     { name = "black" },
     { name = "mypy" },
     { name = "pytest" },
@@ -113,7 +107,6 @@ requires-dist = [
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "json-repair", specifier = ">=0.55.0" },
     { name = "lancedb", specifier = ">=0.29.2" },
-    { name = "langchain-community", marker = "extra == 'ollama'", specifier = ">=0.3.0" },
     { name = "langchain-core", specifier = ">=0.2.0" },
     { name = "langchain-openai", specifier = ">=0.1.0" },
     { name = "langgraph", specifier = ">=0.2.0" },
@@ -151,11 +144,9 @@ requires-dist = [
     { name = "transformers", extras = ["torch"], specifier = ">=4.57.0,<5.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.27.0" },
 ]
-provides-extras = ["ollama"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "agentic-research-kit", extras = ["ollama"] },
     { name = "black", specifier = ">=24.0.0" },
     { name = "mypy", specifier = ">=1.8.0" },
     { name = "pytest", specifier = ">=7.4.0" },
@@ -1863,6 +1854,9 @@ name = "jsonpath-ng"
 version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/32/58/250751940d75c8019659e15482d548a4aa3b6ce122c515102a4bfdac50e3/jsonpath_ng-1.8.0.tar.gz", hash = "sha256:54252968134b5e549ea5b872f1df1168bd7defe1a52fed5a358c194e1943ddc3", size = 74513, upload-time = "2026-02-24T14:42:06.182Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/03/99/33c7d78a3fb70d545fd5411ac67a651c81602cc09c9cf0df383733f068c5/jsonpath_ng-1.8.0-py3-none-any.whl", hash = "sha256:b8dde192f8af58d646fc031fac9c99fe4d00326afc4148f1f043c601a8cfe138", size = 67844, upload-time = "2026-02-28T00:53:19.637Z" },
+]
 
 [[package]]
 name = "jsonpointer"

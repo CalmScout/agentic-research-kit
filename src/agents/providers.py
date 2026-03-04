@@ -16,7 +16,7 @@ class ProviderSpec:
     display_name: str = ""  # Display name
     litellm_prefix: str = ""  # Prefix for LiteLLM
     default_api_base: str = ""  # Default API base URL
-    is_local: bool = False  # Local provider (Ollama, vLLM)
+    is_local: bool = False  # Local provider (vLLM)
 
     @property
     def label(self) -> str:
@@ -45,15 +45,6 @@ PROVIDERS: tuple[ProviderSpec, ...] = (
         env_key="ANTHROPIC_API_KEY",
         display_name="Anthropic",
         litellm_prefix="",
-    ),
-    ProviderSpec(
-        name="ollama",
-        keywords=("ollama",),
-        env_key="",
-        display_name="Ollama",
-        litellm_prefix="ollama",
-        default_api_base="http://localhost:11434",
-        is_local=True,
     ),
     ProviderSpec(
         name="local",

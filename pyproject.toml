@@ -100,9 +100,6 @@ dependencies = [
 # Optional Dependencies
 # -----------------------------------------------------------------------------
 [project.optional-dependencies]
-ollama = [
-    "langchain-community>=0.3.0",  # Ollama LLM support
-]
 
 # -----------------------------------------------------------------------------
 # Development Dependencies
@@ -115,7 +112,6 @@ dev-dependencies = [
     "black>=24.0.0",
     "ruff>=0.1.0",
     "mypy>=1.8.0",
-    "agentic-research-kit[ollama]",  # Include optional dependencies
 ]
 
 # -----------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 """Model selector for multi-provider LLM strategy.
 
 Implements intelligent model selection with automatic fallback:
-- Supports: DeepSeek, OpenAI, Ollama, local Qwen3-8B
+- Supports: DeepSeek, OpenAI, local Qwen3-8B
 - Configurable provider chain with automatic fallback
 - Zero abstraction overhead with direct API calls
 """
@@ -21,16 +21,6 @@ from langchain_openai import ChatOpenAI
 from src.agents.providers import find_by_name
 from src.agents.utils import QwenToolParser
 from src.utils.config import Settings
-
-# Import Ollama support (optional)
-try:
-    from langchain_community.chat_models import ChatOllama
-
-    OLLAMA_AVAILABLE = True
-except ImportError:
-    OLLAMA_AVAILABLE = False
-    logger = logging.getLogger(__name__)
-    logger.warning("langchain-community not installed, Ollama support unavailable")
 
 logger = logging.getLogger(__name__)
 
@@ -229,7 +219,7 @@ class ModelSelector:
     """Selects appropriate LLM based on configuration and availability.
 
     Implements multi-provider strategy:
-    1. Try primary provider (DeepSeek, OpenAI, Ollama, or local)
+    1. Try primary provider (DeepSeek, OpenAI, or local)
     2. Fallback through configured provider chain
     3. Final fallback to local Qwen3-8B
     4. Configurable via environment variables
@@ -273,7 +263,7 @@ class ModelSelector:
         """Get LLM instance for specified provider using registry.
 
         Args:
-            provider_name: Provider name (deepseek, openai, ollama, local, etc.)
+            provider_name: Provider name (deepseek, openai, local, etc.)
 
         Returns:
             BaseChatModel: Provider-specific LLM instance
@@ -294,14 +284,6 @@ class ModelSelector:
 
         if spec.name == "local":
             llm = self.get_local_llm()
-        elif spec.name == "ollama":
-            if not OLLAMA_AVAILABLE:
-                raise RuntimeError("Ollama support (langchain-community) not installed")
-            llm = ChatOllama(
-                model=self.settings.ollama_model,
-                base_url=self.settings.ollama_base_url,
-                temperature=0.0,
-            )
         else:
             # Handle API providers (OpenAI-compatible)
             api_key = getattr(self.settings, f"{spec.name}_api_key", None)

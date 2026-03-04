@@ -393,7 +393,7 @@ def status():
 
     # TODO: Implement status check
     # 1. Check .env file exists
-    # 2. Check Ollama connection
+    # 2. Check local model connection
     # 3. Check dataset exists
     # 4. Check RAG storage
     # 5. Display configuration summary

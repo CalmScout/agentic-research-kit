@@ -30,7 +30,7 @@ dependencies = [
     # -----------------------------------------------------------------------------
     # HuggingFace Models (GPU-accelerated Qwen3)
     # -----------------------------------------------------------------------------
-    "transformers[torch]>=4.57.0,<5.0.0", # Qwen3-VL requires 4.57+, but 5.0.0.dev has breaking changes
+    "transformers[torch]", # Need bleeding edge for qwen3_5 support
     "qwen-vl-utils>=0.0.14", # Qwen3-VL utilities
     "torch>=2.5.0", # PyTorch with CUDA support
     "torchvision>=0.19.0", # Image processing for vision models
@@ -113,6 +113,9 @@ dev-dependencies = [
     "ruff>=0.1.0",
     "mypy>=1.8.0",
 ]
+
+[tool.uv.sources]
+transformers = { git = "https://github.com/huggingface/transformers.git" }
 
 # -----------------------------------------------------------------------------
 # CLI Entry Points

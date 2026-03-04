@@ -92,7 +92,7 @@ class Qwen3VisionEmbedder:
             if context:
                 full_prompt += f"\n\nContext:\n{context}"
 
-            messages = [
+            messages: list[dict[str, Any]] = [
                 {
                     "role": "user",
                     "content": [
@@ -102,7 +102,7 @@ class Qwen3VisionEmbedder:
                 }
             ]
 
-            text = self.processor.apply_chat_template(
+            text = self.processor.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
@@ -111,7 +111,7 @@ class Qwen3VisionEmbedder:
             )
 
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs, max_new_tokens=max_tokens, do_sample=False, temperature=1.0
                 )
 
@@ -217,7 +217,7 @@ class Qwen3TextLLM:
             inputs = self.tokenizer(full_prompt, return_tensors="pt").to(self.model.device)
 
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs,
                     max_new_tokens=max_tokens,
                     temperature=temperature,
@@ -285,21 +285,28 @@ class Qwen3VLTextLLM:
         temperature: float = 0.7,
     ) -> str:
         try:
-            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            messages: list[dict[str, Any]] = [
+                {"role": "user", "content": [{"type": "text", "text": prompt}]}
+            ]
 
             if system_prompt:
                 messages.insert(
                     0, {"role": "system", "content": [{"type": "text", "text": system_prompt}]}
                 )
 
-            text = self.processor.apply_chat_template(
+            text = self.processor.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
             inputs = self.processor(text=[text], return_tensors="pt").to(self.model.device)
 
+            # Qwen3.5 processor sometimes injects mm_token_type_ids for text-only inputs
+            # which the underlying CausalLM doesn't accept. Remove it if present.
+            if "mm_token_type_ids" in inputs:
+                del inputs["mm_token_type_ids"]
+
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs,
                     max_new_tokens=max_tokens,
                     temperature=temperature,
@@ -374,7 +381,7 @@ class UnifiedQwen3VL:
             if context:
                 full_prompt += f"\n\nContext:\n{context}"
 
-            messages = [
+            messages: list[dict[str, Any]] = [
                 {
                     "role": "user",
                     "content": [
@@ -384,7 +391,7 @@ class UnifiedQwen3VL:
                 }
             ]
 
-            text = self.processor.apply_chat_template(
+            text = self.processor.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
@@ -393,7 +400,7 @@ class UnifiedQwen3VL:
             )
 
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs, max_new_tokens=max_tokens, do_sample=False, temperature=1.0
                 )
 
@@ -415,21 +422,28 @@ class UnifiedQwen3VL:
         temperature: float = 0.7,
     ) -> str:
         try:
-            messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+            messages: list[dict[str, Any]] = [
+                {"role": "user", "content": [{"type": "text", "text": prompt}]}
+            ]
 
             if system_prompt:
                 messages.insert(
                     0, {"role": "system", "content": [{"type": "text", "text": system_prompt}]}
                 )
 
-            text = self.processor.apply_chat_template(
+            text = self.processor.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
             inputs = self.processor(text=[text], return_tensors="pt").to(self.model.device)
 
+            # Qwen3.5 processor sometimes injects mm_token_type_ids for text-only inputs
+            # which the underlying CausalLM doesn't accept. Remove it if present.
+            if "mm_token_type_ids" in inputs:
+                del inputs["mm_token_type_ids"]
+
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs,
                     max_new_tokens=max_tokens,
                     temperature=temperature,
@@ -446,6 +460,174 @@ class UnifiedQwen3VL:
         except Exception as e:
             logger.error(f"Error generating text: {e}")
             return f"Error generating text: {e}"
+
+    def generate(self, *args, **kwargs) -> str:
+        return self.generate_text(*args, **kwargs)
+
+    @property
+    def tokenizer(self):
+        return self.processor
+
+    @property
+    def max_new_tokens(self) -> int:
+        return 512
+
+    def cleanup(self):
+        if hasattr(self, "model"):
+            del self.model
+        if hasattr(self, "processor"):
+            del self.processor
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        logger.info(f"✓ Unloaded {self.model_name} from GPU")
+
+
+class UnifiedQwen35:
+    """
+    Unified Qwen3.5 model that natively handles both text and multimodal tasks.
+    """
+
+    def __init__(
+        self,
+        model_name: str = "Qwen/Qwen3.5-4B",
+        device: str = "cuda",
+        torch_dtype: str = "float16",
+        batch_size: int = 4,
+        quantization: str | None = None,
+    ):
+        self.device = device if torch.cuda.is_available() else "cpu"
+        self.torch_dtype = getattr(torch, torch_dtype)
+        self.batch_size = batch_size
+        self.model_name = model_name
+
+        logger.info(f"Loading unified Qwen3.5 model {model_name} on {self.device}...")
+
+        try:
+            from transformers import AutoModelForCausalLM, AutoProcessor
+
+            quant_config = get_quantization_config()
+
+            self.model = AutoModelForCausalLM.from_pretrained(
+                model_name,
+                torch_dtype=self.torch_dtype,
+                device_map="auto" if self.device == "cuda" else None,
+                trust_remote_code=True,
+                quantization_config=quant_config,
+            )
+
+            self.processor = AutoProcessor.from_pretrained(model_name, trust_remote_code=True)
+
+            logger.info(f"✓ Unified {model_name} loaded successfully on {self.model.device}")
+
+        except Exception as e:
+            logger.error(f"Failed to load {model_name}: {e}")
+            raise
+
+    def analyze_image(
+        self, image: str | Path | Image.Image, prompt: str, context: str = "", max_tokens: int = 512
+    ) -> str:
+        try:
+            if isinstance(image, (str, Path)):
+                img: Image.Image = Image.open(image)
+            elif isinstance(image, Image.Image):
+                img = image
+            else:
+                raise ValueError(f"Unsupported image type: {type(image)}")
+
+            full_prompt = f"{prompt}"
+            if context:
+                full_prompt += f"\n\nContext:\n{context}"
+
+            messages: list[dict[str, Any]] = [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "image", "image": img},
+                        {"type": "text", "text": full_prompt},
+                    ],
+                }
+            ]
+
+            text = self.processor.apply_chat_template(  # type: ignore
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+            inputs = self.processor(text=[text], images=[img], return_tensors="pt").to(
+                self.model.device
+            )
+
+            with torch.no_grad():
+                outputs = self.model.generate(  # type: ignore
+                    **inputs, max_new_tokens=max_tokens, do_sample=False, temperature=1.0
+                )
+
+            response = self.processor.batch_decode(
+                outputs[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            )[0]
+
+            return cast(str, response)
+
+        except Exception as e:
+            logger.error(f"Error analyzing image: {e}")
+            return f"Error analyzing image: {e}"
+
+    def generate_text(
+        self,
+        prompt: str,
+        system_prompt: str | None = None,
+        max_tokens: int = 512,
+        temperature: float = 0.7,
+    ) -> str:
+        try:
+            messages: list[dict[str, Any]] = [
+                {"role": "user", "content": [{"type": "text", "text": prompt}]}
+            ]
+
+            if system_prompt:
+                messages.insert(
+                    0, {"role": "system", "content": [{"type": "text", "text": system_prompt}]}
+                )
+
+            text = self.processor.apply_chat_template(  # type: ignore
+                messages, tokenize=False, add_generation_prompt=True
+            )
+
+            inputs = self.processor(text=[text], return_tensors="pt").to(self.model.device)
+
+            # Qwen3.5 processor sometimes injects mm_token_type_ids for text-only inputs
+            # which the underlying CausalLM doesn't accept. Remove it if present.
+            if "mm_token_type_ids" in inputs:
+                del inputs["mm_token_type_ids"]
+
+            with torch.no_grad():
+                outputs = self.model.generate(  # type: ignore
+                    **inputs,
+                    max_new_tokens=max_tokens,
+                    temperature=temperature,
+                    do_sample=temperature > 0,
+                    top_p=0.9,
+                )
+
+            response = self.processor.batch_decode(
+                outputs[:, inputs["input_ids"].shape[1] :], skip_special_tokens=True
+            )[0]
+
+            return cast(str, response)
+
+        except Exception as e:
+            logger.error(f"Error generating text: {e}")
+            return f"Error generating text: {e}"
+
+    def generate(self, *args, **kwargs) -> str:
+        return self.generate_text(*args, **kwargs)
+
+    @property
+    def tokenizer(self):
+        return self.processor
+
+    @property
+    def max_new_tokens(self) -> int:
+        return 512
 
     def cleanup(self):
         if hasattr(self, "model"):
@@ -518,7 +700,7 @@ class Qwen3VLEmbedding:
 
             image = Image.open(image_path)
 
-            messages = [
+            messages: list[dict[str, Any]] = [
                 {
                     "role": "user",
                     "content": [
@@ -527,7 +709,7 @@ class Qwen3VLEmbedding:
                 }
             ]
 
-            text = self.tokenizer.apply_chat_template(
+            text = self.tokenizer.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=False
             )
 
@@ -622,7 +804,7 @@ class Qwen3Embedding:
 _vision_model: Qwen3VisionEmbedder | None = None
 _text_llm: Qwen3TextLLM | Qwen3VLTextLLM | None = None
 _embedding_model: Any | None = None
-_unified_model: UnifiedQwen3VL | None = None
+_unified_model: UnifiedQwen3VL | UnifiedQwen35 | None = None
 _qwen2_llm = None
 _phi35_llm = None
 
@@ -639,32 +821,41 @@ def reset_models():
 
 
 def get_unified_model(
-    model_name: str = "Qwen/Qwen3-VL-2B-Instruct",
+    model_name: str = "Qwen/Qwen3.5-4B",
     device: str = "cuda",
     torch_dtype: str = "float16",
     batch_size: int = 4,
-) -> UnifiedQwen3VL:
+) -> UnifiedQwen3VL | UnifiedQwen35:
     """Get or create unified model singleton."""
     global _unified_model
 
     if _unified_model is None:
-        _unified_model = UnifiedQwen3VL(
-            model_name=model_name, device=device, torch_dtype=torch_dtype, batch_size=batch_size
-        )
+        if "3.5" in model_name:
+            _unified_model = UnifiedQwen35(
+                model_name=model_name, device=device, torch_dtype=torch_dtype, batch_size=batch_size
+            )
+        else:
+            _unified_model = UnifiedQwen3VL(
+                model_name=model_name, device=device, torch_dtype=torch_dtype, batch_size=batch_size
+            )
 
     return _unified_model
 
 
 def get_vision_model(
-    model_name: str = "Qwen/Qwen2.5-VL-3B-Instruct",
+    model_name: str = "Qwen/Qwen3.5-4B",
     device: str = "cuda",
     torch_dtype: str = "float16",
-) -> Qwen3VisionEmbedder | UnifiedQwen3VL:
+) -> Qwen3VisionEmbedder | UnifiedQwen3VL | UnifiedQwen35:
     """Get or create vision model singleton (with unified model support)."""
     global _vision_model, _unified_model
 
-    text_model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3-8B")
-    if model_name == text_model_name and ("VL" in model_name or "vl" in model_name.lower()):
+    text_model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3.5-4B")
+
+    # Qwen 3.5 natively supports vision without 'VL' in name
+    if model_name == text_model_name and (
+        "VL" in model_name or "vl" in model_name.lower() or "3.5" in model_name
+    ):
         return get_unified_model(model_name=model_name, device=device, torch_dtype=torch_dtype)
 
     if _vision_model is None:
@@ -676,13 +867,15 @@ def get_vision_model(
 
 
 def get_text_llm(
-    model_name: str = "Qwen/Qwen3-8B", device: str = "cuda", torch_dtype: str = "float16"
-) -> Qwen3TextLLM | Qwen3VLTextLLM | UnifiedQwen3VL:
+    model_name: str = "Qwen/Qwen3.5-4B", device: str = "cuda", torch_dtype: str = "float16"
+) -> Qwen3TextLLM | Qwen3VLTextLLM | UnifiedQwen3VL | UnifiedQwen35:
     """Get or create text LLM singleton (with unified model support)."""
     global _text_llm, _unified_model
 
-    vision_model_name = os.getenv("VISION_MODEL", "Qwen/Qwen2.5-VL-3B-Instruct")
-    if model_name == vision_model_name and ("VL" in model_name or "vl" in model_name.lower()):
+    vision_model_name = os.getenv("VISION_MODEL", "Qwen/Qwen3.5-4B")
+    if model_name == vision_model_name and (
+        "VL" in model_name or "vl" in model_name.lower() or "3.5" in model_name
+    ):
         return get_unified_model(model_name=model_name, device=device, torch_dtype=torch_dtype)
 
     if _text_llm is None:
@@ -793,13 +986,13 @@ class Qwen2TextLLM:
         """
         try:
             # Format messages (Qwen2 uses chat template)
-            messages = []
+            messages: list[dict[str, Any]] = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
             # Apply chat template
-            text = self.tokenizer.apply_chat_template(
+            text = self.tokenizer.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
@@ -810,7 +1003,7 @@ class Qwen2TextLLM:
 
             # Generate with KV cache enabled (works perfectly with Qwen2!)
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs,
                     max_new_tokens=max_tokens or self.max_new_tokens,
                     temperature=temperature,
@@ -838,12 +1031,12 @@ _qwen2_llm = None
 
 
 def get_qwen2_llm(
-    model_name: str = "Qwen/Qwen2.5-1.5B-Instruct",
+    model_name: str = "Qwen/Qwen3.5-4B",
     device: str = "cuda",
     torch_dtype: str = "float16",
-) -> Qwen2TextLLM:
+) -> Qwen2TextLLM | UnifiedQwen35 | UnifiedQwen3VL:
     """
-    Get or create Qwen2.5 LLM singleton.
+    Get or create Qwen LLM singleton (handles Qwen2.5 and Qwen3.5).
 
     Args:
         model_name: HuggingFace model name
@@ -851,9 +1044,12 @@ def get_qwen2_llm(
         torch_dtype: Data type for model weights
 
     Returns:
-        Qwen2TextLLM instance
+        Qwen2TextLLM, UnifiedQwen35 or UnifiedQwen3VL instance
     """
-    global _qwen2_llm
+    global _qwen2_llm, _unified_model
+
+    if "3.5" in model_name:
+        return get_unified_model(model_name=model_name, device=device, torch_dtype=torch_dtype)
 
     if _qwen2_llm is None:
         _qwen2_llm = Qwen2TextLLM(model_name=model_name, device=device, torch_dtype=torch_dtype)
@@ -951,13 +1147,13 @@ class Phi35TextLLM:
         """
         try:
             # Format messages
-            messages = []
+            messages: list[dict[str, Any]] = []
             if system_prompt:
                 messages.append({"role": "system", "content": system_prompt})
             messages.append({"role": "user", "content": prompt})
 
             # Apply chat template
-            text = self.tokenizer.apply_chat_template(
+            text = self.tokenizer.apply_chat_template(  # type: ignore
                 messages, tokenize=False, add_generation_prompt=True
             )
 
@@ -968,7 +1164,7 @@ class Phi35TextLLM:
 
             # Generate
             with torch.no_grad():
-                outputs = self.model.generate(
+                outputs = self.model.generate(  # type: ignore
                     **inputs,
                     max_new_tokens=max_tokens or self.max_new_tokens,
                     temperature=temperature,

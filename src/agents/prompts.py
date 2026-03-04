@@ -74,6 +74,8 @@ Your role is to provide accurate, well-researched responses based on the availab
 - Provide balanced perspectives on complex topics""",
     user_prompt_template="""**Research Question**: {query}
 
+{memory_context}
+
 **Available Evidence**:
 {evidence_summary}
 
@@ -105,6 +107,8 @@ Your role is to provide thorough, structured analysis that:
 - Provides actionable insights""",
     user_prompt_template="""**Analysis Request**: {query}
 
+{memory_context}
+
 **Available Information**:
 {evidence_summary}
 
@@ -129,6 +133,8 @@ Begin your analysis directly.""",
 QA_TEMPLATE = PromptTemplate(
     system_prompt="""You are a helpful Q&A assistant. Provide clear, accurate answers based on the available information.""",
     user_prompt_template="""**Question**: {query}
+
+{memory_context}
 
 **Relevant Information**:
 {evidence_summary}

@@ -47,6 +47,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
     query = state["query"]
     query_image = state.get("query_image")
     retrieval_mode = state.get("retrieval_mode", "hybrid")
+    memory_context = state.get("memory_context", "")
     settings = get_settings()
 
     logger.info(f"Enhanced Retriever: Processing query '{query[:50]}...' (mode={retrieval_mode})")
@@ -77,13 +78,21 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # -------------------------------------------------------------
             query_type = "multimodal" if query_image else "text"
 
+            # Use both verification feedback and long-term memory to enhance the query
+            active_query = query
+
+            # Incorporate memory context if available
+            if memory_context:
+                logger.debug("Incorporating memory context into retrieval query")
+                # We prepend a summary of the memory to help entity extraction
+                active_query = f"{memory_context[:500]}\n\nQuery: {query}"
+
             # If this is a refinement loop, use feedback to enhance the query
             verification_feedback = state.get("verification_feedback")
-            active_query = query
             if verification_feedback and state.get("verification_status") == "refine":
                 logger.info("Refinement Loop: Enhancing query based on verification feedback")
                 # Extract the core gap from feedback to keep the query focused
-                active_query = f"{query} (Missing: {verification_feedback[:200]})"
+                active_query = f"{active_query} (Missing: {verification_feedback[:200]})"
 
             logger.debug(f"Query type: {query_type}")
 
@@ -140,11 +149,11 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # 1. Local results are very few (< 5)
             # 2. Local results are low quality (avg score < 0.4)
             # 3. Brave key is available
-            
+
             avg_score = sum(retrieval_scores) / len(retrieval_scores) if retrieval_scores else 0
-            
+
             should_trigger_web = (len(retrieved_docs) < 5 or avg_score < 0.4) and settings.brave_api_key
-            
+
             if should_trigger_web:
                 reason = "Insufficient local results" if len(retrieved_docs) < 5 else f"Low quality local results (avg score: {avg_score:.2f})"
                 logger.info(f"{reason}, triggering web search...")

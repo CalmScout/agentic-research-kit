@@ -138,6 +138,12 @@ async def enhanced_response_generator_agent(
     """
     query = state["query"]
     retrieved_docs = state.get("retrieved_docs", [])
+    memory_context_raw = state.get("memory_context", "")
+
+    # Format memory context for template
+    memory_context = ""
+    if memory_context_raw:
+        memory_context = f"**Past Research Context**:\n{memory_context_raw}\n"
 
     logger.info(f"Enhanced Response Generator: Processing {len(retrieved_docs)} retrieved docs")
 
@@ -228,17 +234,12 @@ async def enhanced_response_generator_agent(
                 sources_text = format_sources_for_prompt(top_sources)
 
                 # Generate prompt from template
-                template.format_user_prompt(
-                    query=query,
-                    evidence_summary=evidence_summary,
-                    sources_text=sources_text,
-                )
-
                 # Combine system prompt and user prompt
                 full_prompt = template.get_full_prompt(
                     query=query,
                     evidence_summary=evidence_summary,
                     sources_text=sources_text,
+                    memory_context=memory_context,
                 )
 
                 # ADD EXTRA EMPHASIS ON SOURCE COUNT

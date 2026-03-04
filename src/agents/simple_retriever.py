@@ -44,7 +44,7 @@ async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
 
         # Simple keyword matching for now (will be replaced by vector search)
         query_lower = query.lower()
-        
+
         # Basic stop words to filter out
         stop_words = {
             "a", "an", "the", "and", "or", "but", "if", "then", "else", "when",
@@ -66,12 +66,12 @@ async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
             if not query_words:
                 # If only stop words in query, use them all
                 query_words = query_lower.split()
-                
+
             words_in_query = set(query_words)
             words_in_doc = set(doc_text.split())
             overlap_words = words_in_query & words_in_doc
             overlap_count = len(overlap_words)
-            
+
             # Calculate score
             score = overlap_count / max(len(words_in_query), 1)
 
@@ -80,7 +80,7 @@ async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
             # 2. Must meet a higher threshold (0.3)
             # 3. Give a bonus to matches that aren't just common words like 'research'
             is_significant_match = overlap_count >= 2 or len(words_in_query) <= 2
-            
+
             if score > 0.3 and is_significant_match:
                 scored_docs.append(
                     {

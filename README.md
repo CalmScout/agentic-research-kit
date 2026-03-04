@@ -9,7 +9,7 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Built with LangGraph](https://img.shields.io/badge/Built%20with-LangGraph-blue)](https://github.com/langchain-ai/langgraph)
 
-Agentic Research Kit (ARK) is a multimodal agentic RAG system for deep research and information synthesis. It utilizes a 3-agent [LangGraph](https://github.com/langchain-ai/langgraph) workflow to orchestrate knowledge graph traversal, high-performance vector search, and real-time web augmentation to produce grounded, citation-rich analysis from heterogeneous document sets.
+Agentic Research Kit (ARK) is a multimodal agentic RAG system designed for deep research and information synthesis. It addresses the common problem of LLM hallucinations and superficial answers by orchestrating a 3-agent [LangGraph](https://github.com/langchain-ai/langgraph) workflow that combines knowledge graph traversal, high-performance vector search, and real-time web augmentation. The system leverages a unified local multimodal architecture to ensure that every output is highly reasoned, grounded in evidence, and enriched with verifiable citations.
 
 ## 🏗 Project Structure
 
@@ -24,7 +24,7 @@ Agentic Research Kit (ARK) is a multimodal agentic RAG system for deep research 
 │   ├── api/                # FastAPI REST implementation
 │   ├── data_ingestion/     # Universal pipeline (PDF, DOCX, HTML, CSV)
 │   ├── evaluation/         # RAGAS and retrieval metric suites
-│   └── utils/              # GPU model wrappers (Qwen3-VL, Qwen2.5)
+│   └── utils/              # GPU model wrappers (Unified Qwen3.5 architecture)
 ├── docs/                   # Technical deep-dives and architecture diagrams
 ├── examples/               # Implementation patterns and use cases
 ├── rag_storage/            # Knowledge Graph storage
@@ -33,34 +33,34 @@ Agentic Research Kit (ARK) is a multimodal agentic RAG system for deep research 
 
 ## 🧠 Core Architecture
 
-ARK implements a sequential 3-agent loop designed to minimize hallucination and maximize evidence grounding:
+ARK implements a sequential 3-agent loop designed to minimize hallucination and maximize evidence grounding. This workflow operates using a natively unified multimodal engine (`Qwen3.5-4B`), which allows a single model instance to seamlessly analyze both text and visual inputs within a strict 12GB local VRAM footprint.
 
 1.  **Enhanced Retriever (Agent 1)**:
-    *   Analyzes query modality (text/image).
-    *   Extracts entities using local lightweight LLMs (Qwen2.5-1.5B).
+    *   Analyzes query modality (text/image) using the unified reasoning engine.
+    *   Extracts entities from the query to formulate search plans.
     *   Executes hybrid retrieval: Vector + BM25 + Knowledge Graph ([LightRAG](https://github.com/HKUDS/LightRAG)).
-    *   Augments local context with Brave Search if internal knowledge is insufficient.
+    *   Proactively augments local context with Brave Search if internal knowledge is deemed insufficient.
 
 2.  **Enhanced Response Generator (Agent 2)**:
     *   Reranks candidates using cross-modal scoring.
-    *   Synthesizes evidence into a structured summary.
-    *   Generates draft response with strict source attribution.
+    *   Synthesizes evidence into a structured, highly cohesive summary.
+    *   Generates draft responses with strict source attribution.
 
 3.  **Verification Node (Agent 3)**:
-    *   Expert critique node that fact-checks the response against retrieved sources.
+    *   Expert critique node that fact-checks the response against retrieved sources via iterative ReAct loops.
     *   Detects and removes hallucinations before the final answer is returned.
-    *   Ensures 100% citation integrity.
+    *   Ensures 100% citation integrity and explicit grounding.
 
 ## 🛠 Technology Stack
 
 | Component | Technology | Implementation Details |
 |-----------|-----------|------------------------|
-| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) | State-aware 3-agent sequential workflow |
+| **Orchestration** | [LangGraph](https://github.com/langchain-ai/langgraph) | State-aware 3-agent sequential workflow with ReAct logic |
 | **RAG Engine** | [LightRAG](https://github.com/HKUDS/LightRAG) | Hybrid Vector + Knowledge Graph traversal |
 | **Storage Backend**| [LanceDB](https://lancedb.com/) | High-performance columnar storage for KV and Vectors |
 | **Embeddings** | [Qwen3-VL-2B](https://huggingface.co/Qwen) | Unified 2048D cross-modal vector space |
-| **Inference (Local)** | [Qwen2.5](https://huggingface.co/Qwen) | Entity extraction and fact-checking |
-| **Inference (API)** | [DeepSeek](https://www.deepseek.com/) / [OpenAI](https://openai.com/) | Primary reasoning and synthesis |
+| **Inference (Local)** | [Qwen3.5-4B](https://huggingface.co/Qwen) | Unified dense model for entity extraction, vision, and fact-checking |
+| **Inference (API)** | [DeepSeek](https://www.deepseek.com/) / [OpenAI](https://openai.com/) | Configurable cloud fallback for primary reasoning |
 | **Observability** | [Arize Phoenix](https://phoenix.arize.com/) | Distributed OTLP tracing and span analysis |
 | **Evaluation** | [RAGAS](https://github.com/explodinggradients/ragas) | Faithfulness, Relevancy, and Context metrics |
 
@@ -139,7 +139,7 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 *   ✅ **Phase 2: Performance & Integrity**: LanceDB migration and Verification Node (Critique).
 *   ✅ **Phase 3: Research Scope Expansion**: Integrated Web Search and Proactive Research.
 *   ✅ **Phase 3.5: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
-*   ⬜ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and subagent delegation.
+*   ✅ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
 *   ⬜ **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB.
 *   ⬜ **Phase 6: Interface & Asynchronicity**: Message Bus integration and interactive clarification.
 *   ⬜ **Phase 7: Temporal Autonomy**: Cron services and self-waking research tasks.
@@ -149,12 +149,13 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 Detailed technical guides are available in the `docs/` directory:
 
 - **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)**: Visual deep-dive into the 3-agent research flow.
+- **[Qwen3.5 Research & Roadmap](docs/QWEN35_ARCHITECTURE_RESEARCH.md)**: Detailed reasoning behind the unified model consolidation and future vLLM scaling plans.
 - **[LightRAG Integration](docs/LIGHTRAG_INTEGRATION.md)**: Details on hybrid retrieval and LanceDB storage.
 - **[Logging Infrastructure](docs/LOGGING.md)**: Details on structured logging and log management.
 - **[Observability Setup](docs/PHOENIX.md)**: Guide to using Arize Phoenix for trace analysis.
 - **[Testing Guide](docs/TESTING.md)**: Instructions for running the 50+ test suite and coverage reports.
 - **[RAGAS Usage](docs/RAGAS_USAGE.md)**: Automated evaluation of retrieval and generation quality.
-- **[Evolution Roadmap](docs/ROADMAP.md)**: Detailed status of nanobot feature adaptation.
 
 ## 📝 License
 Apache License 2.0
+

@@ -22,6 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **RAGAS Evaluation Pipeline**: Established a "Golden Dataset" and automated evaluator for retrieval and generation quality.
 
 ### Changed
+- **Unified Model Architecture**: Consolidated local inference from separate vision (`Qwen3-VL-2B`) and text (`Qwen2.5-1.5B`) models into a single, natively multimodal **`Qwen3.5-4B`** engine. This significantly improves cognitive intelligence while remaining strictly under the 12GB VRAM constraint.
 - **Project Rebranding**: Renamed from "MultiModal Agentic RAG" to **Agentic Research Kit (ARK)**.
 - **Documentation Refactor**: Consistently moved technical guides to the `docs/` directory and updated all architecture diagrams.
 - **Test Suite Modernization**: Achieved >90% coverage on core workflow components and resolved all deprecation/runtime warnings (Phase 3.5 Complete).
@@ -29,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - **VRAM Optimization**: Unified model loading for Qwen3-VL and Qwen2.5 saves ~6GB VRAM.
+- **Transformers Compatibility**: Added build-time workaround to fetch bleeding-edge `transformers` from GitHub to natively support the newly released `qwen3_5` architectures.
 - **Async Safety**: Fixed "object dict can't be used in await" and "coroutine never awaited" warnings in tests.
 - **LanceDB Deprecations**: Replaced `table_names()` with `list_tables()`.
 

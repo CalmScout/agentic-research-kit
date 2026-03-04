@@ -11,10 +11,12 @@ from lightrag.kg.shared_storage import initialize_share_data
 from pydantic import BaseModel, Field
 
 from src.agents.lancedb_storage import LanceDBDocStatusStorage
+from src.utils.logger import logger, setup_logging
+from src.utils.observability import setup_observability
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure logging and observability
+setup_logging()
+setup_observability()
 
 # Initialize FastAPI app
 app = FastAPI(

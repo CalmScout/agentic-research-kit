@@ -150,6 +150,7 @@ Detailed technical guides are available in the `docs/` directory:
 
 - **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)**: Visual deep-dive into the 3-agent research flow.
 - **[LightRAG Integration](docs/LIGHTRAG_INTEGRATION.md)**: Details on hybrid retrieval and LanceDB storage.
+- **[Logging Infrastructure](docs/LOGGING.md)**: Details on structured logging and log management.
 - **[Observability Setup](docs/PHOENIX.md)**: Guide to using Arize Phoenix for trace analysis.
 - **[Testing Guide](docs/TESTING.md)**: Instructions for running the 50+ test suite and coverage reports.
 - **[RAGAS Usage](docs/RAGAS_USAGE.md)**: Automated evaluation of retrieval and generation quality.

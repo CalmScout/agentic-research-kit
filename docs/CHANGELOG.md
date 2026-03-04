@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Centralized Logging & Observability**: Unified all logging into a single `Loguru` infrastructure with automated file rotation, retention, and dual-sink output (JSON/Text).
+- **Global Observability Hub**: Centralized Phoenix and OpenTelemetry setup into `src/utils/observability.py` with automatic initialization on workflow import.
+- **Unified Configuration**: Integrated all logging and tracing settings into the Pydantic `Settings` class for consistent environment-based control.
 - **3-Agent Architecture**: Introduced a dedicated **Verification Node** (Agent 3) for expert critique and hallucination removal.
 - **LanceDB Integration**: Migrated storage backends (KV, Vector, Doc Status) to LanceDB for high-performance binary storage and scalability.
 - **Thread-Isolated Retrieval**: Successfully resolved LightRAG async conflicts via a dedicated background event loop, enabling full local hybrid retrieval.

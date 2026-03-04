@@ -1,73 +1,97 @@
-"""Structured logging configuration."""
+"""Structured logging configuration using Loguru.
 
-import logging
+Standardizes logging across the application, supporting both text (dev) 
+and JSON (prod) formats with automatic rotation and retention.
+"""
+
 import sys
 from pathlib import Path
 from typing import Any
 
-import structlog
+from loguru import logger
 
 from .config import get_settings
 
+# Global flag to track initialization state
+_logging_initialized = False
 
-def configure_logging() -> None:
-    """Configure structured logging for the application."""
+
+def setup_logging() -> None:
+    """Configure Loguru for application-wide logging based on settings."""
+    global _logging_initialized
+    
+    if _logging_initialized:
+        return
+        
     settings = get_settings()
-
-    # Create log directory if it doesn't exist
+    
+    # Create log directory
     log_dir = Path(settings.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
 
-    # Configure standard logging
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stderr,
-        level=getattr(logging, settings.log_level.upper()),
-    )
+    # Remove default handler
+    logger.remove()
 
-    # Configure structlog
+    # -----------------------------------------------------------------
+    # Console handler
+    # -----------------------------------------------------------------
     if settings.log_format == "json":
-        # JSON format for production
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.add_logger_name,
-                structlog.processors.TimeStamper(fmt="iso"),
-                structlog.processors.StackInfoRenderer(),
-                structlog.processors.format_exc_info,
-                structlog.processors.UnicodeDecoder(),
-                structlog.processors.JSONRenderer(),
-            ],
-            wrapper_class=structlog.stdlib.BoundLogger,
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=True,
+        # For production/structured environments
+        logger.add(
+            sys.stdout,
+            format="{message}",
+            serialize=True,
+            level=settings.log_level.upper(),
         )
     else:
-        # Text format for development
-        structlog.configure(
-            processors=[
-                structlog.contextvars.merge_contextvars,
-                structlog.stdlib.add_log_level,
-                structlog.stdlib.add_logger_name,
-                structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S"),
-                structlog.dev.ConsoleRenderer(),
-            ],
-            wrapper_class=structlog.stdlib.BoundLogger,
-            context_class=dict,
-            logger_factory=structlog.stdlib.LoggerFactory(),
-            cache_logger_on_first_use=True,
+        # Colorful text format for development
+        logger.add(
+            sys.stdout,
+            format=(
+                "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+                "<level>{level: <8}</level> | "
+                "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
+                "<level>{message}</level>"
+            ),
+            level=settings.log_level.upper(),
+            colorize=True,
         )
 
+    # -----------------------------------------------------------------
+    # File handlers (Persistent logs)
+    # -----------------------------------------------------------------
+    # General log file (all levels from settings.log_level and up)
+    logger.add(
+        log_dir / "ark_{time:YYYY-MM-DD}.log",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        level=settings.log_level.upper(),
+        rotation="10 MB",
+        retention="30 days",
+        compression="zip",
+    )
 
-def get_logger(name: str) -> Any:
+    # Error-only log file (Always capture errors separately)
+    logger.add(
+        log_dir / "ark_errors.log",
+        format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+        level="ERROR",
+        rotation="10 MB",
+        retention="30 days",
+        compression="zip",
+    )
+
+    _logging_initialized = True
+    logger.debug("logging_initialized", log_dir=str(log_dir), log_level=settings.log_level)
+
+
+def get_logger(name: str | None = None) -> Any:
     """Get a logger instance.
 
     Args:
-        name: Logger name (typically __name__ of the module)
+        name: Optional name for the logger (unused by loguru directly 
+              but kept for API compatibility with standard logging).
 
     Returns:
-        Configured logger instance
+        Configured loguru logger instance
     """
-    return structlog.get_logger(name)
+    return logger

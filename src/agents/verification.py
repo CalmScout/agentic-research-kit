@@ -9,7 +9,7 @@ from typing import Any, cast
 
 import json_repair
 from langchain_core.messages import HumanMessage, SystemMessage
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.enhanced_response_generator import format_sources_for_prompt

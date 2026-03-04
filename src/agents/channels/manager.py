@@ -2,7 +2,7 @@
 
 import asyncio
 
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.channels.base import Channel, InboundMessage, OutboundMessage
 from src.agents.workflow import query_with_agents

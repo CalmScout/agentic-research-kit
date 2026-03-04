@@ -1,7 +1,7 @@
 import asyncio
 from pathlib import Path
 from src.agents.workflow import query_with_agents
-from loguru import logger
+from src.utils.logger import logger
 
 async def test_react_loop():
     # We'll use a query that is likely to need refinement if the first pass is too narrow

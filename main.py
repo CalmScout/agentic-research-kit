@@ -40,12 +40,18 @@ def query(query: str, mode: str, session: str, debug: bool, prompt_template: str
 
     from src.agents.workflow import query_with_agents
     from src.agents.utils import format_response_for_display
+    from src.utils.logger import setup_logging
+    from src.utils.observability import setup_observability
+    from src.utils.config import get_settings
 
-    # Configure logging
+    # Override log level if debug flag is set
     if debug:
-        logging.basicConfig(level=logging.DEBUG, format='%(levelname)s: %(message)s')
-    else:
-        logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
+        settings = get_settings()
+        settings.log_level = "DEBUG"
+
+    # Configure logging and observability
+    setup_logging()
+    setup_observability()
 
     click.echo(f"🔍 Query: {query}")
     if image:

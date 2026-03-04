@@ -9,8 +9,7 @@ from pathlib import Path
 from src.agents.workflow import (
     create_multi_agent_workflow,
     query_with_agents,
-    query_with_agents_sync,
-    _initialize_phoenix
+    query_with_agents_sync
 )
 from src.agents.base_state import BaseAgentState
 
@@ -212,18 +211,6 @@ async def test_workflow_metadata_added():
         # Verify metadata
         assert result["retrieved_count"] == 2
         assert len(result["entities"]) == 2
-
-
-def test_initialize_phoenix_disabled():
-    """Test Phoenix initialization when disabled."""
-    os.environ["PHOENIX_ENABLED"] = "false"
-
-    # Should not raise exception
-    _initialize_phoenix()
-
-    # Phoenix should remain disabled
-    from src.agents.workflow import _phoenix_initialized
-    assert _phoenix_initialized == False
 
 
 @pytest.mark.asyncio

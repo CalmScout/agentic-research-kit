@@ -15,7 +15,7 @@ from contextlib import AsyncExitStack
 from typing import Any, cast
 
 from langchain_core.messages import SystemMessage
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.model_selector import get_model_selector

@@ -11,7 +11,7 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.tools.base import Tool
 

@@ -3,7 +3,7 @@
 import re
 from collections.abc import Awaitable, Callable
 
-from loguru import logger
+from src.utils.logger import logger
 
 try:
     from telegram import Update

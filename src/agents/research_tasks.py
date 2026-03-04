@@ -11,7 +11,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.model_selector import get_model_selector
 from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool

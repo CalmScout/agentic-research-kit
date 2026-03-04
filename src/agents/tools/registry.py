@@ -6,7 +6,7 @@ Copied from nanobot framework with modifications for ARK's use case.
 import json
 from typing import Any
 
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.tools.base import Tool
 

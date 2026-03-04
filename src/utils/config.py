@@ -166,6 +166,20 @@ class Settings(BaseSettings):
     eval_output_dir: str = Field(default="./reports", description="Evaluation output directory")
 
     # -------------------------------------------------------------------------
+    # Observability Configuration (Phoenix / Arize AI)
+    # -------------------------------------------------------------------------
+    phoenix_enabled: bool = Field(
+        default=False, description="Enable Phoenix observability for tracing"
+    )
+    phoenix_collector_endpoint: str = Field(
+        default="http://localhost:6006/v1/traces",
+        description="Phoenix collector endpoint for OpenTelemetry traces",
+    )
+    phoenix_project_name: str = Field(
+        default="agentic-research-kit", description="Project name for Phoenix traces"
+    )
+
+    # -------------------------------------------------------------------------
     # Agent Configuration
     # -------------------------------------------------------------------------
     retrieval_top_k: int = Field(default=50, description="Number of documents to retrieve")
@@ -252,3 +266,9 @@ def get_settings() -> Settings:
     if _settings is None:
         _settings = Settings()
     return _settings
+
+
+def clear_settings_cache() -> None:
+    """Clear global settings cache (useful for testing)."""
+    global _settings
+    _settings = None

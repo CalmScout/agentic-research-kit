@@ -14,7 +14,7 @@ import json
 from contextlib import AsyncExitStack
 from typing import Any
 
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.embeddings import embedder

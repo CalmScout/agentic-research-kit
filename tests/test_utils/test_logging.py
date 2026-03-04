@@ -1,12 +1,17 @@
 import pytest
 from pathlib import Path
-import os
-from src.utils.logging import setup_logging, get_logger
-from src.utils.logger import configure_logging
+from src.utils.logger import setup_logging, get_logger
+from src.utils.config import get_settings
 
 def test_setup_logging(tmp_path):
+    # Setup test settings
+    settings = get_settings()
     log_dir = tmp_path / "logs"
-    setup_logging(console_level="DEBUG", log_dir=log_dir)
+    settings.log_dir = str(log_dir)
+    settings.log_level = "DEBUG"
+    
+    # Initialize logging
+    setup_logging()
     
     assert log_dir.exists()
     assert log_dir.is_dir()
@@ -15,12 +20,12 @@ def test_setup_logging(tmp_path):
     logger.info("test message")
     
     # Check if log files were created
+    # Note: Loguru might take a moment to flush to disk or create files
     log_files = list(log_dir.glob("*.log"))
     assert len(log_files) >= 1
 
-def test_configure_logging():
-    # This just calls setup_logging with defaults
-    configure_logging()
-    logger = get_logger()
-    logger.info("test configure_logging")
-    assert True
+def test_get_logger():
+    logger = get_logger("test_name")
+    assert logger is not None
+    # In our implementation, get_logger returns the loguru.logger singleton
+    logger.info("test get_logger")

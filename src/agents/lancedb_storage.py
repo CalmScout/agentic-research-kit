@@ -22,7 +22,7 @@ from lightrag.kg.shared_storage import (
     set_all_update_flags,
 )
 from lightrag.utils import compute_mdhash_id, get_pinyin_sort_key
-from loguru import logger
+from src.utils.logger import logger
 
 
 @final

@@ -72,17 +72,18 @@ ARK integrates Phoenix trace IDs with **RAGAS evaluation**. When tracing is enab
 
 ## Advanced Configuration
 
-### Custom Project Name
-The default project name is `agentic-research-kit`. You can modify this in `src/agents/workflow.py`.
+Phoenix settings are managed through the global configuration system in `src/utils/config.py` and can be set via environment variables:
 
-### Collector Endpoint
-By default, traces are sent to `http://localhost:6006/v1/traces`. You can override this using:
-```bash
-export PHOENIX_COLLECTOR_ENDPOINT="http://your-remote-server:6006/v1/traces"
-```
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `PHOENIX_ENABLED` | Enable tracing | `false` |
+| `PHOENIX_COLLECTOR_ENDPOINT` | OTLP collector URL | `http://localhost:6006/v1/traces` |
+| `PHOENIX_PROJECT_NAME` | Project name in UI | `agentic-research-kit` |
+
+ARK uses a centralized setup in `src/utils/observability.py` which is automatically initialized whenever the agent workflow is imported.
 
 ---
 
-**Status**: ✅ Phoenix observability fully integrated into the 3-agent pipeline.
+**Status**: ✅ Phoenix observability fully integrated into the 3-agent pipeline with centralized OTLP management.
 
-**Last Updated**: 2026-02-25
+**Last Updated**: 2026-03-04

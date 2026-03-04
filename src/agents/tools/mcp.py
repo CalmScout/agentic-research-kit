@@ -8,7 +8,7 @@ from dataclasses import dataclass, field
 from typing import Any, cast
 
 import httpx
-from loguru import logger
+from src.utils.logger import logger
 
 from src.agents.tools.base import Tool
 from src.agents.tools.registry import ToolRegistry

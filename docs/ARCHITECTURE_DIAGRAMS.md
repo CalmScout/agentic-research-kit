@@ -26,7 +26,7 @@ flowchart TB
     end
 
     subgraph "3-Agent Orchestration Layer"
-        LangGraph[LangGraph Workflow<br/>3-Agent Sequential Flow]
+        LangGraph[LangGraph Workflow<br/>3-Agent ReAct Loop]
         A1[Agent 1: Enhanced Retriever<br/>Tool Registry]
         A2[Agent 2: Enhanced Response Generator<br/>Tool Registry]
         A3[Agent 3: Verification Node<br/>Critique Agent]
@@ -41,7 +41,8 @@ flowchart TB
 
     subgraph "Model Layer"
         Embeddings[Qwen3-VL-Embedding-2B<br/>2048-dim Multimodal]
-        LLM_Local[Qwen2.5-1.5B / Qwen3-8B<br/>GPU Local]
+        LLM_Unified[Qwen3.5-4B<br/>Unified Vision/Text GPU]
+        LLM_Fast[Qwen2.5-1.5B<br/>Fast Extraction GPU]
         LLM_API[DeepSeek / OpenAI API<br/>Reasoning LLM]
     end
 
@@ -66,7 +67,9 @@ flowchart TB
     LangGraph --> A1
     A1 --> A2
     A2 --> A3
-    A3 --> LangGraph
+    A3 -- "Refine / Loop" --> A1
+    A3 -- "Verified" --> END((END))
+    
     LangGraph --> CLI
     LangGraph --> API
 
@@ -77,10 +80,10 @@ flowchart TB
     A2 --> T4
 
     %% Tools to Models
-    T1 --> LLM_Local
-    T4 --> LLM_Local
+    T1 --> LLM_Fast
+    T4 --> LLM_Unified
     A2 --> LLM_API
-    A3 --> LLM_Local
+    A3 --> LLM_Unified
 
     %% Tools to Data
     T2 --> LanceDB
@@ -119,20 +122,21 @@ flowchart TB
 - **Gateway**: Asynchronous communication channels (e.g., Telegram).
 
 **3-Agent Orchestration**:
-- **LangGraph**: Orchestrates the 3-agent sequential workflow with state management.
-- **Agent 1 (Enhanced Retriever)**: Query analysis, entity extraction, and multi-source retrieval.
+- **LangGraph**: Orchestrates the 3-agent ReAct loop with state management.
+- **Agent 1 (Enhanced Retriever)**: Query analysis, entity extraction, and multi-source retrieval. Supports refinement based on Agent 3 feedback.
 - **Agent 2 (Enhanced Response Generator)**: Reranking, evidence synthesis, and citation-rich draft generation.
-- **Agent 3 (Verification Node)**: Fact-checking draft responses against sources to prevent hallucinations.
+- **Agent 3 (Verification Node)**: Fact-checking draft responses against sources. Can trigger a loop back to Agent 1 if gaps are found.
 
 **Tool Layer**:
-- **EntityExtractorTool**: Extracts key entities using local lightweight LLMs.
+- **EntityExtractorTool**: Extracts key entities using local lightweight LLMs (Qwen2.5-1.5B).
 - **HybridRetrieverTool**: Performs Vector + BM25 + KG retrieval via thread-isolated LightRAG backed by LanceDB.
 - **WebSearch/Fetch**: Augments local knowledge with real-time web data (Brave Search).
-- **RerankerTool**: Improves precision by re-ordering retrieved documents.
+- **RerankerTool**: Improves precision by re-ordering retrieved documents using Unified Qwen3.5.
 
 **Model Layer**:
 - **Embeddings**: Qwen3-VL-Embedding-2B for unified text/image vector space.
-- **Local LLMs**: Qwen2.5-1.5B (extraction & fact-checking) and Qwen3-8B (fallback generation).
+- **Unified Qwen3.5**: A single natively multimodal engine (4B parameters) for vision, reasoning, and fact-checking.
+- **Fast Qwen2.5**: A lightweight 1.5B model optimized for rapid entity extraction.
 - **API LLMs**: DeepSeek-R1 or GPT-4 for high-quality reasoning and synthesis.
 
 ---
@@ -155,34 +159,42 @@ sequenceDiagram
     LG->>Mem: Load research context (LanceDB)
     Mem-->>LG: context
 
-    LG->>A1: Execute (query, context)
-    activate A1
-    A1->>Tools: execute("entity_extractor")
-    Tools-->>A1: entities
-    A1->>Tools: execute("hybrid_retriever")
-    Tools-->>A1: local_docs (LanceDB)
-    alt insufficient results
-        A1->>Tools: execute("web_search")
-        Tools-->>A1: web_docs
+    loop ReAct Refinement (Max 3 iterations)
+        LG->>A1: Execute (query, context, feedback)
+        activate A1
+        A1->>Tools: execute("entity_extractor")
+        Tools-->>A1: entities
+        A1->>Tools: execute("hybrid_retriever")
+        Tools-->>A1: local_docs (LanceDB)
+        alt insufficient results
+            A1->>Tools: execute("web_search")
+            Tools-->>A1: web_docs
+        end
+        A1-->>LG: all_retrieved_docs
+        deactivate A1
+
+        LG->>A2: Execute (query, docs)
+        activate A2
+        A2->>Tools: execute("reranker")
+        Tools-->>A2: top_docs
+        A2->>A2: Synthesize evidence
+        A2->>A2: Generate draft response
+        A2-->>LG: draft_response, sources
+        deactivate A2
+
+        LG->>A3: Execute (query, sources, draft)
+        activate A3
+        A3->>A3: Fact-check response against sources
+        alt gaps detected
+            A3-->>LG: status="refine", feedback="missing context for X"
+        else verified
+            A3-->>LG: status="verified", verified_response
+        end
+        deactivate A3
+        
+        break if verified or max_iterations
+        end
     end
-    A1-->>LG: all_retrieved_docs
-    deactivate A1
-
-    LG->>A2: Execute (query, docs)
-    activate A2
-    A2->>Tools: execute("reranker")
-    Tools-->>A2: top_docs
-    A2->>A2: Synthesize evidence
-    A2->>A2: Generate draft response
-    A2-->>LG: draft_response, sources
-    deactivate A2
-
-    LG->>A3: Execute (query, sources, draft)
-    activate A3
-    A3->>A3: Fact-check response against sources
-    A3->>A3: Correct hallucinations
-    A3-->>LG: verified_response, feedback
-    deactivate A3
 
     LG->>Mem: Log query to history (LanceDB)
     LG-->>U: result
@@ -273,4 +285,4 @@ flowchart TB
 
 ---
 
-**Last Updated**: 2026-02-25 (Updated for LanceDB migration and 3-agent verification workflow)
+**Last Updated**: 2026-03-04 (Updated for ReAct loop integration and Unified Qwen3.5 model)

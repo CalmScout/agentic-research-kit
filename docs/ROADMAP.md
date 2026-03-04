@@ -69,19 +69,21 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
     - Established a "Golden Dataset" in `data/research_golden_dataset.csv`.
     - Implemented `RAGASEvaluator` and `run_ragas_eval.py` script.
 
-### Phase 4: Cognitive Intelligence (Immediate Focus)
-- [ ] **Iterative Reasoning Loop (ReAct)**:
-    - Transition `workflow.py` from a linear pipeline (Retrieve -> Generate -> Verify) to a dynamic loop (Reason -> Act -> Observe -> Repeat).
-    - Enable the `VerificationNode` to trigger "Refinement Cycles" if evidence is insufficient or hallucinations are detected.
-    - Implement "Research Gap" detection to guide subsequent retrieval steps.
+### Phase 4: Cognitive Intelligence (Complete)
+- [x] **Iterative Reasoning Loop (ReAct)**:
+    - Transitioned `workflow.py` from a linear pipeline (Retrieve -> Generate -> Verify) to a dynamic loop (Reason -> Act -> Observe -> Repeat).
+    - Enabled the `VerificationNode` to trigger "Refinement Cycles" if evidence is insufficient or hallucinations are detected.
+    - Implemented "Research Gap" detection in `EnhancedRetriever` to guide subsequent retrieval steps.
 - [ ] **Subagent Delegation**:
-    - Port `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents to handle specialized sub-tasks.
+    - Port `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents to handle specialized sub-tasks. (Pending integration)
 
-### Phase 5: High-Fidelity Research Memory (Planned)
-- [ ] **Semantic Research Store (LanceDB)**:
-    - Fully migrate `RESEARCH_MEMORY.md` findings to a vector-enabled LanceDB table.
-    - Implement "Long-term RAG" to allow retrieval from past research findings across different sessions.
-    - Add semantic deduplication to prevent redundant findings from clogging the memory.
+### Phase 5: High-Fidelity Research Memory (In Progress)
+- [x] **Semantic Research Store (LanceDB)**:
+    - [x] Fully migrated `RESEARCH_MEMORY.md` findings to a vector-enabled LanceDB table in `src/agents/memory/store.py`.
+    - [x] Implemented "Long-term RAG" to allow retrieval from past research findings across different sessions.
+- [ ] **Memory Hardening**:
+    - [ ] Add semantic deduplication to prevent redundant findings from clogging the memory.
+    - [ ] Implement automated session consolidation triggered by `ResearchTaskManager`.
 
 ### Phase 6: Interface & Asynchronicity (Planned)
 - [ ] **Message Bus Integration**:

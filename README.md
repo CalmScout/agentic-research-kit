@@ -9,7 +9,18 @@
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Built with LangGraph](https://img.shields.io/badge/Built%20with-LangGraph-blue)](https://github.com/langchain-ai/langgraph)
 
-Agentic Research Kit (ARK) is a multimodal agentic RAG system designed for deep research and information synthesis. It addresses the common problem of LLM hallucinations and superficial answers by orchestrating a 3-agent [LangGraph](https://github.com/langchain-ai/langgraph) workflow that combines knowledge graph traversal, high-performance vector search, and real-time web augmentation. The system leverages a unified local multimodal architecture to ensure that every output is highly reasoned, grounded in evidence, and enriched with verifiable citations.
+Agentic Research Kit (ARK) is a multimodal, agentic RAG system engineered to solve the core limitations of standard LLM applications: **hallucinations, superficial answers, and lack of verifiability.** 
+
+Designed as a rigorous research synthesis tool, ARK shifts the paradigm from simple "prompt-and-respond" to a self-correcting, multi-agent workflow. By orchestrating a 3-agent [LangGraph](https://github.com/langchain-ai/langgraph) loop, it combines knowledge graph traversal, high-performance vector search, and real-time web augmentation. The system leverages a unified local multimodal architecture to ensure that every output is logically sound, empirically grounded, and enriched with strict, verifiable citations.
+
+## 🎯 The Problem & The Solution
+
+**The Problem:** Standard RAG and LLM systems fail in deep research contexts. They often blindly trust top-k vector similarities, synthesize conflicting information poorly, and hallucinate facts when context is sparse. They lack the cognitive architecture to pause, reflect, and verify their own claims.
+
+**The Solution:** ARK introduces a cyclic, critically-evaluating architecture:
+*   **Adaptive Context:** It doesn't just search; it formulates a research plan, extracts semantic entities, and queries a knowledge graph to understand relationship context, not just vector distance.
+*   **Self-Correction:** It employs a dedicated Verification Agent that actively critiques generated responses against the raw retrieved data, forcing the system to rewrite and drop unsupported claims before the user ever sees the output.
+*   **Resource Efficiency:** It achieves this high-level cognitive intelligence entirely locally on consumer hardware (12GB VRAM) by consolidating tasks into a single natively multimodal `Qwen3.5` engine utilizing 8-bit quantization.
 
 ## 🏗 Project Structure
 
@@ -35,21 +46,21 @@ Agentic Research Kit (ARK) is a multimodal agentic RAG system designed for deep 
 
 ARK implements a sequential 3-agent loop designed to minimize hallucination and maximize evidence grounding. This workflow operates using a natively unified multimodal engine (`Qwen3.5-4B`), which allows a single model instance to seamlessly analyze both text and visual inputs within a strict 12GB local VRAM footprint.
 
-1.  **Enhanced Retriever (Agent 1)**:
+1.  **Enhanced Retriever (Agent 1): The Researcher**
     *   Analyzes query modality (text/image) using the unified reasoning engine.
-    *   Extracts entities from the query to formulate search plans.
+    *   Extracts entities from the query to formulate dynamic search plans.
     *   Executes hybrid retrieval: Vector + BM25 + Knowledge Graph ([LightRAG](https://github.com/HKUDS/LightRAG)).
     *   Proactively augments local context with Brave Search if internal knowledge is deemed insufficient.
 
-2.  **Enhanced Response Generator (Agent 2)**:
-    *   Reranks candidates using cross-modal scoring.
+2.  **Enhanced Response Generator (Agent 2): The Synthesizer**
+    *   Reranks candidates using cross-modal scoring to prioritize highest-signal data.
     *   Synthesizes evidence into a structured, highly cohesive summary.
-    *   Generates draft responses with strict source attribution.
+    *   Generates draft responses with strict, inline source attribution.
 
-3.  **Verification Node (Agent 3)**:
+3.  **Verification Node (Agent 3): The Critic**
     *   Expert critique node that fact-checks the response against retrieved sources via iterative ReAct loops.
-    *   Detects and removes hallucinations before the final answer is returned.
-    *   Ensures 100% citation integrity and explicit grounding.
+    *   Detects and removes hallucinations, demanding rewrites if claims lack explicit grounding.
+    *   Ensures 100% citation integrity.
 
 ## 🛠 Technology Stack
 
@@ -140,7 +151,7 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 *   ✅ **Phase 3: Research Scope Expansion**: Integrated Web Search and Proactive Research.
 *   ✅ **Phase 3.5: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
 *   ✅ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
-*   ⬜ **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB.
+*   🔄 **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB (In Progress).
 *   ⬜ **Phase 6: Interface & Asynchronicity**: Message Bus integration and interactive clarification.
 *   ⬜ **Phase 7: Temporal Autonomy**: Cron services and self-waking research tasks.
 

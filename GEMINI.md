@@ -69,10 +69,15 @@ The project uses `uv` for dependency management and a `Makefile` for common task
 ## 🗺 Roadmap (Context for Changes)
 
 ARK is currently in **Phase 4 (Cognitive Intelligence)**:
+- **Completed Phases:**
+  - **Phase 1:** Extensibility (MCP Client and Dynamic Tool Loading).
+  - **Phase 2:** Performance & Integrity (LanceDB migration and Verification Node).
+  - **Phase 3:** Research Scope Expansion (Web Search and Proactive Research).
+  - **Phase 3.5:** Hardening & Evaluation (RAGAS and 90% Test Coverage).
+  - **Phase 4:** Cognitive Intelligence (Iterative ReAct reasoning loops).
 - **Upcoming Phases:**
-  - **Phase 4:** Iterative ReAct reasoning loops and subagent delegation.
-  - **Phase 5:** High-Fidelity Research Memory (LanceDB).
+  - **Phase 5:** High-Fidelity Research Memory (LanceDB-backed Semantic Research Store).
   - **Phase 6:** Message Bus integration and interactive clarification.
   - **Phase 7:** Temporal Autonomy (Cron services).
 
-Refer to `docs/ROADMAP.md` and `nanobot_adaptation_roadmap.md` for detailed transition goals.
+Refer to `docs/ROADMAP.md` for detailed transition goals.

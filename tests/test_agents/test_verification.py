@@ -1,8 +1,10 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-import json
-from unittest.mock import MagicMock, patch, AsyncMock
-from src.agents.verification import verification_agent
+
 from src.agents.base_state import BaseAgentState
+from src.agents.verification import verification_agent
+
 
 @pytest.mark.asyncio
 async def test_verification_agent_verified():

@@ -3,7 +3,6 @@
 Provides REST API endpoints for querying the research system.
 """
 
-import logging
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, status

@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """Test script to verify unified model loading and memory savings."""
 
-import torch
 import gc
 import logging
-from pathlib import Path
+
+import torch
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -53,9 +53,10 @@ def test_unified_model():
     print_memory_stats("Test: Unified Model Approach")
 
     try:
-        from src.utils.vision_embedding import UnifiedQwen3VL
-        from PIL import Image
         import numpy as np
+        from PIL import Image
+
+        from src.utils.vision_embedding import UnifiedQwen3VL
 
         model_name = "Qwen/Qwen3-VL-2B-Instruct"
 
@@ -107,8 +108,8 @@ def test_ingester_unified():
     print_memory_stats("Test: ClaimRAGIngester with Unified Model")
 
     try:
-        from src.data_ingestion.rag_ingester import ClaimRAGIngester
         import pandas as pd
+        from src.data_ingestion.rag_ingester import ClaimRAGIngester
 
         logger.info("Initializing ClaimRAGIngester...")
         ingester = ClaimRAGIngester(
@@ -136,7 +137,7 @@ def test_ingester_unified():
 
         # Test with small sample data
         logger.info("Testing ingestion with sample data...")
-        sample_df = pd.DataFrame({
+        _sample_df = pd.DataFrame({
             'reviewed claim': ['Test claim 1', 'Test claim 2'],
             'summary': ['Summary 1', 'Summary 2'],
             'url': ['http://test1.com', 'http://test2.com'],

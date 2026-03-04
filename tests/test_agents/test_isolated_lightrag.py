@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-import asyncio
-from unittest.mock import MagicMock, patch, AsyncMock
+
 from src.agents.isolated_lightrag import IsolatedLightRAG, create_isolated_lightrag
+
 
 @pytest.fixture
 def mock_rag():
@@ -18,7 +20,9 @@ def rag_factory(mock_rag):
     return lambda: mock_rag
 
 def test_isolated_lightrag_init():
-    factory = lambda: MagicMock()
+    def factory():
+        return MagicMock()
+
     isolated = IsolatedLightRAG(factory, max_workers=2, timeout=30.0)
     assert isolated.rag_factory == factory
     assert isolated.max_workers == 2

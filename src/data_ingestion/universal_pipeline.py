@@ -12,7 +12,7 @@ from typing import Any, cast
 import pandas as pd
 from tqdm import tqdm
 
-from ..utils.logger import configure_logging
+from ..utils.logger import setup_logging
 from .document_loaders import LOADER_REGISTRY, load_document
 from .generic_rag_ingester import GenericRAGIngester
 
@@ -72,7 +72,7 @@ class UniversalIngestionPipeline:
             Dictionary with ingestion statistics
         """
         # Configure logging
-        configure_logging()
+        setup_logging()
 
         logger.info("=" * 80)
         logger.info("STARTING UNIVERSAL INGESTION PIPELINE")

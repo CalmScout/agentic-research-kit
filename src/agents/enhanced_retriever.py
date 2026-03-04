@@ -14,8 +14,6 @@ import json
 from contextlib import AsyncExitStack
 from typing import Any
 
-from src.utils.logger import logger
-
 from src.agents.base_state import BaseAgentState
 from src.agents.embeddings import embedder
 from src.agents.tools.mcp import MCPServerConfig, connect_mcp_servers
@@ -25,6 +23,7 @@ from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool
 from src.agents.tools.registry import ToolRegistry
 from src.agents.tools.web import WebFetchTool, WebSearchTool
 from src.utils.config import get_settings
+from src.utils.logger import logger
 
 
 async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:

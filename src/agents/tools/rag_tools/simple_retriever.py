@@ -6,10 +6,9 @@ Provides basic retrieval from RAG storage using keyword matching.
 import json
 from typing import Any
 
-from src.utils.logger import logger
-
 from src.agents.simple_retriever import simple_retriever
 from src.agents.tools.base import Tool
+from src.utils.logger import logger
 
 
 class SimpleRetrieverTool(Tool):

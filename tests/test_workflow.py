@@ -1,17 +1,15 @@
 """Tests for multi-agent workflow orchestration."""
 
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
 import os
-import json
-from pathlib import Path
+from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
 
 from src.agents.workflow import (
     create_multi_agent_workflow,
     query_with_agents,
-    query_with_agents_sync
+    query_with_agents_sync,
 )
-from src.agents.base_state import BaseAgentState
 
 
 @pytest.mark.asyncio
@@ -34,7 +32,7 @@ async def test_workflow_end_to_end(agent_state_minimal, mock_llm, mock_embedding
     with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
         with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
             with patch("src.agents.workflow.verification_agent") as mock_verifier:
-                
+
                 # Setup mock returns
                 mock_retriever.return_value = {
                     "query_type": "text",
@@ -43,18 +41,23 @@ async def test_workflow_end_to_end(agent_state_minimal, mock_llm, mock_embedding
                     "retrieval_scores": [0.9],
                     "retrieval_method": "mock"
                 }
-                
+
                 mock_generator.return_value = {
                     "response": "Final response",
                     "sources": [{"text": "test", "score": 0.9}],
                     "top_results": [{"text": "test", "score": 0.9}],
-                    "confidence": 0.9
+                    "confidence": 0.9,
+                    "entities": ["climate change"],
+                    "metadata": {}
                 }
-                
+
                 mock_verifier.return_value = {
                     "response": "Final response",
                     "verification_status": "verified",
-                    "verification_feedback": "All good"
+                    "verification_feedback": "All good",
+                    "iteration_count": 1,
+                    "entities": ["climate change"],
+                    "metadata": {}
                 }
 
                 result = await query_with_agents(query)
@@ -80,8 +83,8 @@ async def test_workflow_error_handling():
         result = await query_with_agents(query)
 
         # Should return error response
-        assert "error" in result or "response" in result
-        assert result.get("confidence") is None
+        assert "error" in result
+        assert "Workflow failed" in result["error"]
 
 
 @pytest.mark.asyncio
@@ -92,6 +95,7 @@ async def test_workflow_phoenix_disabled():
 
     # Re-initialize to test without Phoenix
     import importlib
+
     import src.agents.workflow
     importlib.reload(src.agents.workflow)
 
@@ -130,10 +134,25 @@ async def test_workflow_state_propagation():
     with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
         with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
             with patch("src.agents.workflow.verification_agent") as mock_verifier:
-                
-                mock_retriever.return_value = {"entities": ["test"], "retrieved_docs": [{"text": "doc1"}]}
-                mock_generator.return_value = {"response": "resp", "sources": []}
-                mock_verifier.return_value = {"verification_status": "verified"}
+
+                mock_retriever.return_value = {
+                    "entities": ["test"],
+                    "retrieved_docs": [{"text": "doc1"}],
+                    "metadata": {}
+                }
+                mock_generator.return_value = {
+                    "response": "resp",
+                    "sources": [],
+                    "entities": ["test"],
+                    "metadata": {}
+                }
+                mock_verifier.return_value = {
+                    "verification_status": "verified",
+                    "verification_feedback": "",
+                    "iteration_count": 1,
+                    "entities": ["test"],
+                    "metadata": {}
+                }
 
                 result = await query_with_agents(query)
 
@@ -157,7 +176,11 @@ async def test_workflow_with_debug_mode():
             "confidence": 0.8,
             "sources": [],
             "entities": [],
-            "retrieved_docs": []
+            "retrieved_docs": [],
+            "verification_status": "verified",
+            "verification_feedback": "",
+            "iteration_count": 1,
+            "metadata": {}
         })
 
         # Test with debug=True
@@ -181,7 +204,11 @@ async def test_workflow_with_multimodal_query():
             "confidence": 0.8,
             "sources": [],
             "entities": [],
-            "retrieved_docs": []
+            "retrieved_docs": [],
+            "verification_status": "verified",
+            "verification_feedback": "",
+            "iteration_count": 1,
+            "metadata": {}
         })
 
         result = await query_with_agents(query, query_image=image_path)
@@ -203,7 +230,11 @@ async def test_workflow_metadata_added():
             "confidence": 0.8,
             "sources": [{"text": "source1"}, {"text": "source2"}],
             "entities": ["entity1", "entity2"],
-            "retrieved_docs": [{"text": "doc1"}, {"text": "doc2"}]
+            "retrieved_docs": [{"text": "doc1"}, {"text": "doc2"}],
+            "verification_status": "verified",
+            "verification_feedback": "",
+            "iteration_count": 1,
+            "metadata": {}
         })
 
         result = await query_with_agents(query)
@@ -225,7 +256,11 @@ async def test_workflow_empty_sources():
             "response": "No relevant information found.",
             "sources": [],
             "entities": [],
-            "retrieved_docs": []
+            "retrieved_docs": [],
+            "verification_status": "verified",
+            "verification_feedback": "",
+            "iteration_count": 1,
+            "metadata": {}
         })
 
         result = await query_with_agents(query)

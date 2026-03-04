@@ -1,14 +1,12 @@
 """Tests for evaluation module."""
 
-import pytest
-from unittest.mock import Mock, patch, AsyncMock
-import pandas as pd
 from io import StringIO
+from unittest.mock import patch
 
-from src.evaluation.simple_eval import (
-    evaluate_retrieval,
-    calculate_retrieval_metrics
-)
+import pandas as pd
+import pytest
+
+from src.evaluation.simple_eval import calculate_retrieval_metrics, evaluate_retrieval
 
 
 @pytest.mark.asyncio

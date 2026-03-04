@@ -1,7 +1,10 @@
-import pytest
-import numpy as np
 from unittest.mock import MagicMock, patch
+
+import numpy as np
+import pytest
+
 from src.agents.embeddings import EmbeddingService
+
 
 @pytest.fixture
 def service():
@@ -10,7 +13,7 @@ def service():
 def test_embed_text(service):
     mock_model = MagicMock()
     mock_model.embed_text.return_value = np.array([0.1, 0.2, 0.3])
-    
+
     with patch("src.agents.embeddings.get_embedding_model", return_value=mock_model):
         result = service.embed_text("hello")
         assert result == [0.1, 0.2, 0.3]
@@ -19,7 +22,7 @@ def test_embed_text(service):
 def test_embed_image(service):
     mock_model = MagicMock()
     mock_model.embed_image.return_value = np.array([0.4, 0.5, 0.6])
-    
+
     with patch("src.agents.embeddings.get_embedding_model", return_value=mock_model):
         result = service.embed_image("test.jpg")
         assert result == [0.4, 0.5, 0.6]

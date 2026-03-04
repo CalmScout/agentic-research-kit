@@ -1,7 +1,10 @@
-import pytest
 import json
-from unittest.mock import MagicMock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool
+
 
 @pytest.fixture
 def tool():
@@ -19,16 +22,16 @@ async def test_hybrid_retriever_tool_success(tool):
             ]
         }
     }
-    
+
     with (
         patch.object(HybridRetrieverTool, "_initialize_isolated_rag"),
         patch.object(tool, "isolated_rag", mock_isolated_rag)
     ):
         tool._initialized = True
-        
+
         result_json = await tool.execute(query="test query", top_k=2)
         result = json.loads(result_json)
-        
+
         assert result["retrieval_method"] == "hybrid"
         assert len(result["retrieved_docs"]) == 2
         assert result["retrieved_docs"][0]["text"] == "chunk 1"
@@ -38,24 +41,24 @@ async def test_hybrid_retriever_tool_success(tool):
 async def test_hybrid_retriever_tool_fallback(tool):
     mock_isolated_rag = MagicMock()
     mock_isolated_rag.aquery_sync.side_effect = Exception("LightRAG failed")
-    
+
     mock_fallback_result = {
         "retrieved_docs": [{"text": "fallback doc", "score": 0.5, "metadata": {}}],
         "retrieval_method": "keyword"
     }
-    
+
     with (
         patch.object(HybridRetrieverTool, "_initialize_isolated_rag"),
         patch.object(tool, "isolated_rag", mock_isolated_rag),
         patch("src.agents.tools.rag_tools.hybrid_retriever.simple_retriever", new_callable=AsyncMock) as mock_simple
     ):
-        
+
         tool._initialized = True
         mock_simple.return_value = mock_fallback_result
-        
+
         result_json = await tool.execute(query="test query")
         result = json.loads(result_json)
-        
+
         assert result["retrieval_method"] == "keyword"
         assert result["retrieved_docs"][0]["text"] == "fallback doc"
 

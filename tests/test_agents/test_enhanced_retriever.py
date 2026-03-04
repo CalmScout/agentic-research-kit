@@ -1,11 +1,11 @@
 """Tests for Enhanced Retriever agent (combines Query Analyzer + Retriever)."""
 
-import pytest
 import json
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import Mock, patch
+
+import pytest
 
 from src.agents.enhanced_retriever import enhanced_retriever_agent
-from src.agents.base_state import BaseAgentState
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_enhanced_retriever_multimodal_query(agent_state_minimal, mock_llm
                 "retrieval_scores": [],
                 "retrieval_method": "hybrid"
             })
-        
+
         mock_execute.side_effect = side_effect
 
         with patch("src.agents.enhanced_retriever.embedder", mock_embedding_model):
@@ -93,7 +93,7 @@ async def test_enhanced_retriever_entity_extraction(agent_state_minimal):
                 "retrieval_scores": [],
                 "retrieval_method": "hybrid"
             })
-        
+
         mock_execute.side_effect = side_effect
 
         with patch("src.agents.enhanced_retriever.embedder", Mock()):

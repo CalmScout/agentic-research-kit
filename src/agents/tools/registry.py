@@ -6,9 +6,8 @@ Copied from nanobot framework with modifications for ARK's use case.
 import json
 from typing import Any
 
-from src.utils.logger import logger
-
 from src.agents.tools.base import Tool
+from src.utils.logger import logger
 
 
 class ToolRegistry:

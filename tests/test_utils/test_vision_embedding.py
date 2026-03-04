@@ -1,25 +1,21 @@
-import pytest
-import numpy as np
-import torch
-import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from src.utils.vision_embedding import (
-    get_quantization_config,
-    get_vision_model,
-    get_text_llm,
-    get_embedding_model,
-    get_qwen2_llm,
-    get_phi35_llm,
-    reset_models,
-    Qwen3VisionEmbedder,
+    Phi35TextLLM,
+    Qwen2TextLLM,
+    Qwen3Embedding,
     Qwen3TextLLM,
+    Qwen3VisionEmbedder,
+    Qwen3VLEmbedding,
     Qwen3VLTextLLM,
     UnifiedQwen3VL,
-    Qwen3VLEmbedding,
-    Qwen3Embedding,
-    Qwen2TextLLM,
-    Phi35TextLLM
+    get_quantization_config,
+    get_vision_model,
+    reset_models,
 )
+
 
 @pytest.fixture(autouse=True)
 def cleanup_models():

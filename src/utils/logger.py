@@ -1,6 +1,6 @@
 """Structured logging configuration using Loguru.
 
-Standardizes logging across the application, supporting both text (dev) 
+Standardizes logging across the application, supporting both text (dev)
 and JSON (prod) formats with automatic rotation and retention.
 """
 
@@ -19,12 +19,12 @@ _logging_initialized = False
 def setup_logging() -> None:
     """Configure Loguru for application-wide logging based on settings."""
     global _logging_initialized
-    
+
     if _logging_initialized:
         return
-        
+
     settings = get_settings()
-    
+
     # Create log directory
     log_dir = Path(settings.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -88,7 +88,7 @@ def get_logger(name: str | None = None) -> Any:
     """Get a logger instance.
 
     Args:
-        name: Optional name for the logger (unused by loguru directly 
+        name: Optional name for the logger (unused by loguru directly
               but kept for API compatibility with standard logging).
 
     Returns:

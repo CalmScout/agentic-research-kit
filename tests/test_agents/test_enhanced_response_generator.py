@@ -1,11 +1,13 @@
 """Tests for Enhanced Response Generator agent (combines Evidence Aggregator + Response Generator)."""
 
-import pytest
 import json
-from unittest.mock import Mock, patch, AsyncMock
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
-from src.agents.enhanced_response_generator import enhanced_response_generator_agent
+import pytest
+
 from src.agents.base_state import BaseAgentState
+from src.agents.enhanced_response_generator import enhanced_response_generator_agent
+
 
 @pytest.fixture
 def agent_state_with_docs() -> BaseAgentState:
@@ -75,18 +77,18 @@ def mock_llm():
 @pytest.mark.asyncio
 async def test_enhanced_response_generator_basic(agent_state_with_docs, mock_llm):
     """Test enhanced response generator with basic state."""
-    
+
     mock_registry = MagicMock()
     mock_registry.close = AsyncMock()
     # Mock reranker to just return the same docs
     mock_registry.execute = AsyncMock(return_value=json.dumps({"reranked_docs": agent_state_with_docs["retrieved_docs"]}))
-    
+
     with patch("src.agents.enhanced_response_generator.get_model_selector") as mock_get_model:
         mock_get_model.return_value = Mock(
             get_local_llm=Mock(return_value=mock_llm),
             get_llm_with_fallback=Mock(return_value=mock_llm)
         )
-        
+
         with patch("src.agents.enhanced_response_generator.ToolRegistry", return_value=mock_registry):
             # Execute agent
             result = await enhanced_response_generator_agent(agent_state_with_docs)
@@ -125,6 +127,4 @@ async def test_enhanced_response_generator_handles_errors(agent_state_with_docs)
         # Should return error response
         assert "response" in result
         assert "error" in result["response"].lower()
-
-from unittest.mock import MagicMock
 

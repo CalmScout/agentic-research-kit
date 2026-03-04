@@ -4,9 +4,9 @@ Integrates OpenTelemetry to capture traces from agents, LLMs, and RAG components
 """
 
 from typing import Any
-from src.utils.logger import logger
-from src.utils.config import get_settings
 
+from src.utils.config import get_settings
+from src.utils.logger import logger
 
 # Global flags to track initialization state
 _observability_initialized = False
@@ -52,7 +52,7 @@ def setup_observability() -> None:
         LangChainInstrumentor().instrument(tracer_provider=_tracer_provider)
 
         _observability_initialized = True
-        logger.info(f"✓ Phoenix + OpenTelemetry instrumentation enabled")
+        logger.info("✓ Phoenix + OpenTelemetry instrumentation enabled")
         logger.info(f"  Traces: {settings.phoenix_collector_endpoint.replace('/v1/traces', '')}")
 
     except ImportError as e:
@@ -63,4 +63,5 @@ def setup_observability() -> None:
     except Exception as e:
         logger.error(f"Failed to initialize Phoenix: {e}")
         import traceback
+
         logger.debug(traceback.format_exc())

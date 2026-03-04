@@ -9,11 +9,11 @@ from typing import Any, cast
 
 import json_repair
 from langchain_core.messages import HumanMessage, SystemMessage
-from src.utils.logger import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.enhanced_response_generator import format_sources_for_prompt
 from src.agents.model_selector import get_model_selector
+from src.utils.logger import logger
 
 VERIFICATION_PROMPT = """You are an expert fact-checker and research validator.
 Your job is to verify that a generated response is fully supported by the provided source documents.

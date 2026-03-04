@@ -4,7 +4,7 @@ Defines the base state that flows through all agents using LangGraph's
 state management. Domain-specific states can extend this base.
 """
 
-from typing import Annotated, NotRequired, TypedDict
+from typing import Annotated, Any, NotRequired, TypedDict
 
 from langgraph.graph import add_messages
 
@@ -38,6 +38,8 @@ class BaseAgentState(TypedDict):
         verification_status: Status from verification node ("verified" or "corrected")
         verification_feedback: Feedback from the critique LLM
         messages: LangGraph message history (auto-annotated)
+        session_id: Optional session identifier
+        metadata: Optional metadata dictionary
     """
 
     # -------------------------------------------------------------------------
@@ -47,6 +49,8 @@ class BaseAgentState(TypedDict):
     query_image: str | None
     retrieval_mode: str | None  # LightRAG mode: naive, local, global, hybrid
     memory_context: str | None  # Research context from memory store
+    session_id: NotRequired[str | None]
+    metadata: NotRequired[dict[str, Any]]
 
     # -------------------------------------------------------------------------
     # Agent 1: Enhanced Retriever output

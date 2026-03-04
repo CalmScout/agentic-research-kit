@@ -1,8 +1,19 @@
-import pytest
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
-from unittest.mock import MagicMock, patch, AsyncMock
-from src.agents.direct_lightrag_retriever import DirectLightRAGRetriever, get_direct_lightrag_retriever, _patched_get_storage_class
-from src.agents.lancedb_storage import LanceDBKVStorage, LanceDBDocStatusStorage, LanceDBVectorDBStorage
+import pytest
+
+from src.agents.direct_lightrag_retriever import (
+    DirectLightRAGRetriever,
+    _patched_get_storage_class,
+    get_direct_lightrag_retriever,
+)
+from src.agents.lancedb_storage import (
+    LanceDBDocStatusStorage,
+    LanceDBKVStorage,
+    LanceDBVectorDBStorage,
+)
+
 
 @pytest.fixture
 def retriever():
@@ -10,11 +21,11 @@ def retriever():
 
 def test_patched_get_storage_class():
     mock_self = MagicMock()
-    
+
     assert _patched_get_storage_class(mock_self, "LanceDBKVStorage") == LanceDBKVStorage
     assert _patched_get_storage_class(mock_self, "LanceDBDocStatusStorage") == LanceDBDocStatusStorage
     assert _patched_get_storage_class(mock_self, "LanceDBVectorDBStorage") == LanceDBVectorDBStorage
-    
+
     with patch("src.agents.direct_lightrag_retriever._original_get_storage_class") as mock_orig:
         mock_orig.return_value = "original_class"
         assert _patched_get_storage_class(mock_self, "JsonKVStorage") == "original_class"
@@ -23,7 +34,7 @@ def test_patched_get_storage_class():
 async def test_embed_with_local_model(retriever):
     mock_model = MagicMock()
     mock_model.embed_text.return_value = np.zeros(2048)
-    
+
     with patch.object(retriever, "_get_embedding_model", return_value=mock_model):
         result = await retriever._embed_with_local_model(["text1", "text2"])
         assert result.shape == (2, 2048)
@@ -33,7 +44,7 @@ async def test_embed_with_local_model(retriever):
 async def test_llm_model_func(retriever):
     mock_llm = MagicMock()
     mock_llm.generate.return_value = "LightRAG response"
-    
+
     with patch("src.agents.direct_lightrag_retriever.get_qwen2_llm", return_value=mock_llm):
         func = retriever._create_llm_model_func()
         result = await func("prompt", system_prompt="system")
@@ -52,10 +63,10 @@ async def test_retrieve_success(retriever):
             ]
         }
     })
-    
+
     with patch.object(retriever, "get_rag", return_value=mock_rag):
         result = await retriever.retrieve("query", top_k=2, mode="naive")
-        
+
         assert "retrieved_docs" in result
         assert len(result["retrieved_docs"]) == 2
         assert result["retrieved_docs"][0]["text"] == "chunk 1"
@@ -66,7 +77,7 @@ async def test_retrieve_success(retriever):
 async def test_retrieve_error(retriever):
     mock_rag = MagicMock()
     mock_rag.aquery_data = AsyncMock(side_effect=Exception("RAG failure"))
-    
+
     with patch.object(retriever, "get_rag", return_value=mock_rag):
         result = await retriever.retrieve("query")
         assert "error" in result

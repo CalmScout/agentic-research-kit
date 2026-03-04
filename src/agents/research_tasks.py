@@ -11,13 +11,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from src.utils.logger import logger
-
 from src.agents.model_selector import get_model_selector
 from src.agents.tools.rag_tools.hybrid_retriever import HybridRetrieverTool
 from src.agents.tools.registry import ToolRegistry
 from src.agents.tools.web import WebFetchTool, WebSearchTool
 from src.utils.config import get_settings
+from src.utils.logger import logger
 
 
 @dataclass

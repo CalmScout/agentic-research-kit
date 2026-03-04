@@ -1,7 +1,7 @@
-import pytest
-from pathlib import Path
-from src.utils.logger import setup_logging, get_logger
+from unittest.mock import patch
 from src.utils.config import get_settings
+from src.utils.logger import get_logger, setup_logging
+
 
 def test_setup_logging(tmp_path):
     # Setup test settings
@@ -9,16 +9,17 @@ def test_setup_logging(tmp_path):
     log_dir = tmp_path / "logs"
     settings.log_dir = str(log_dir)
     settings.log_level = "DEBUG"
-    
-    # Initialize logging
-    setup_logging()
-    
+
+    # Initialize logging - reset flag to ensure it actually runs
+    with patch("src.utils.logger._logging_initialized", False):
+        setup_logging()
+
     assert log_dir.exists()
     assert log_dir.is_dir()
-    
+
     logger = get_logger()
     logger.info("test message")
-    
+
     # Check if log files were created
     # Note: Loguru might take a moment to flush to disk or create files
     log_files = list(log_dir.glob("*.log"))

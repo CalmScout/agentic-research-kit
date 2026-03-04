@@ -15,7 +15,6 @@ from contextlib import AsyncExitStack
 from typing import Any, cast
 
 from langchain_core.messages import SystemMessage
-from src.utils.logger import logger
 
 from src.agents.base_state import BaseAgentState
 from src.agents.model_selector import get_model_selector
@@ -23,6 +22,7 @@ from src.agents.prompts import get_template
 from src.agents.tools.rag_tools.reranker import RerankerTool
 from src.agents.tools.registry import ToolRegistry
 from src.agents.utils import group_docs_by_source
+from src.utils.logger import logger
 
 # Evidence synthesis prompt
 EVIDENCE_SYNTHESIS_PROMPT = """You are an expert at synthesizing research evidence.

@@ -1,15 +1,16 @@
 """Test configuration and shared fixtures for pytest."""
 
-import pytest
-import asyncio
 import json
-import tempfile
-from typing import List, Dict, Any, AsyncGenerator, Optional
-from pathlib import Path
-from unittest.mock import Mock, AsyncMock, patch
 
 # Add src to path
 import sys
+import tempfile
+from pathlib import Path
+from typing import Any
+from unittest.mock import Mock, patch
+
+import pytest
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
@@ -27,12 +28,12 @@ class MockEmbeddingModel:
         """
         self.fixed_value = fixed_value
 
-    def embed_text(self, text: str) -> List[float]:
+    def embed_text(self, text: str) -> list[float]:
         """Return fixed embedding vector for text."""
         # 2048-dim vector (Qwen3-VL-Embedding-2B)
         return [self.fixed_value] * 2048
 
-    def embed_multimodal(self, text: str, image_path: str) -> List[float]:
+    def embed_multimodal(self, text: str, image_path: str) -> list[float]:
         """Return fixed embedding for multimodal content."""
         return [self.fixed_value] * 2048
 
@@ -43,7 +44,7 @@ class MockLLM:
     def __init__(
         self,
         response: str = "Mock response",
-        responses: Optional[List[str]] = None,
+        responses: list[str] | None = None,
         fail_on_call: bool = False
     ):
         """Initialize mock LLM.
@@ -78,7 +79,7 @@ class MockLLM:
 class MockRetriever:
     """Mock retriever for testing."""
 
-    def __init__(self, results: Optional[List[Dict[str, Any]]] = None):
+    def __init__(self, results: list[dict[str, Any]] | None = None):
         self.results = results or [
             {
                 "text": "Mock result 1: Climate change is real.",
@@ -94,7 +95,7 @@ class MockRetriever:
             },
         ]
 
-    async def retrieve(self, query: str, top_k: int = 50) -> Dict[str, Any]:
+    async def retrieve(self, query: str, top_k: int = 50) -> dict[str, Any]:
         """Mock retrieval."""
         return {
             "retrieved_docs": self.results[:top_k],
@@ -106,7 +107,7 @@ class MockRetriever:
 class MockReranker:
     """Mock reranker for testing."""
 
-    def __init__(self, reranked_results: Optional[List[Dict[str, Any]]] = None):
+    def __init__(self, reranked_results: list[dict[str, Any]] | None = None):
         """Initialize mock reranker.
 
         Args:
@@ -127,7 +128,7 @@ class MockReranker:
             },
         ]
 
-    async def rerank(self, query: str, documents: List[Dict[str, Any]], top_k: int = 10) -> List[Dict[str, Any]]:
+    async def rerank(self, query: str, documents: list[dict[str, Any]], top_k: int = 10) -> list[dict[str, Any]]:
         """Mock reranking.
 
         Args:
@@ -300,7 +301,6 @@ def sample_claims():
 @pytest.fixture
 def agent_state():
     """Create a sample AgentState for testing."""
-    from src.agents.base_state import BaseAgentState
 
     return {
         "query": SAMPLE_QUERY,
@@ -325,7 +325,6 @@ def agent_state():
 @pytest.fixture
 def agent_state_minimal():
     """Create minimal AgentState (beginning of workflow)."""
-    from src.agents.base_state import BaseAgentState
 
     return {
         "query": SAMPLE_QUERY,
@@ -350,7 +349,6 @@ def agent_state_minimal():
 @pytest.fixture
 def agent_state_with_docs():
     """Create AgentState with retrieved documents (for testing response generator)."""
-    from src.agents.base_state import BaseAgentState
 
     return {
         "query": SAMPLE_QUERY,
@@ -429,7 +427,7 @@ def test_config(mock_embedding_model, mock_llm, mock_retriever):
          patch("src.utils.vision_embedding.Qwen3VisionEmbedder", return_value=mock_llm), \
          patch("src.utils.vision_embedding.Qwen2TextLLM", return_value=mock_llm), \
          patch("src.utils.vision_embedding.UnifiedQwen3VL", return_value=mock_llm):
-        
+
         try:
             # Monkey-patch the model singletons if they exist
             from src.agents import embeddings, model_selector, simple_retriever

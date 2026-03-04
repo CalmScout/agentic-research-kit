@@ -1,4 +1,4 @@
-.PHONY: help install test lint format clean serve docs ingest query ci
+.PHONY: help install test lint format clean serve docs ingest query ci phoenix phoenix-stop verify-pipeline
 
 help:  ## Show this help message
 	@echo 'Usage: make [target]'
@@ -40,6 +40,21 @@ clean:  ## Clean up temporary files
 
 serve:  ## Start API server
 	uv run ark serve
+
+phoenix:  ## Start Phoenix observability server
+	uv run python -m phoenix.server.main serve
+
+phoenix-stop:  ## Stop Phoenix server if running on port 6006
+	@lsof -ti:6006 | xargs kill -9 2>/dev/null || echo "Phoenix not running on port 6006"
+
+verify-pipeline:  ## Start Phoenix in background and run verification script
+	@echo "🔥 Starting Phoenix Observability Server in background..."
+	@/bin/bash -c "trap 'kill %1 2>/dev/null' EXIT; \
+	uv run python -m phoenix.server.main serve > /dev/null 2>&1 & \
+	echo '⏳ Waiting for Phoenix to initialize (5s)...'; \
+	sleep 5; \
+	echo '🚀 Running verification script...'; \
+	PHOENIX_ENABLED=true uv run python scripts/verify_react_loop.py"
 
 ingest:  ## Ingest sample PDF
 	uv run ark ingest-dir ./data/pdf --pattern "transformers.pdf" --max-items 1

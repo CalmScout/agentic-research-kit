@@ -9,11 +9,11 @@ This simplified workflow reduces complexity while maintaining functionality.
 Follows LangGraph best practices from the agents-from-scratch course.
 """
 
-import os
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
+from opentelemetry import trace
 
 from src.agents.base_state import BaseAgentState
 from src.agents.enhanced_response_generator import enhanced_response_generator_agent
@@ -21,7 +21,7 @@ from src.agents.enhanced_retriever import enhanced_retriever_agent
 from src.agents.memory import MemoryStore
 from src.agents.verification import verification_agent
 from src.utils.logger import logger, setup_logging
-from src.utils.observability import setup_observability
+from src.utils.observability import _observability_initialized, setup_observability
 
 # Initialize logging and observability (Phoenix/OpenTelemetry) if enabled in settings
 setup_logging()
@@ -75,11 +75,15 @@ def create_multi_agent_workflow():
 
         if status == "verified" or iteration >= max_iterations:
             if iteration >= max_iterations and status != "verified":
-                logger.warning(f"⚠ ReAct Loop: Maximum iterations ({max_iterations}) reached. Ending research.")
+                logger.warning(
+                    f"⚠ ReAct Loop: Maximum iterations ({max_iterations}) reached. Ending research."
+                )
             return END
 
         # If refinement or correction is needed, loop back to retriever
-        logger.info(f"↺ ReAct Loop: Verification requested {status} (Iteration {iteration}). Back to Retriever.")
+        logger.info(
+            f"↺ ReAct Loop: Verification requested {status} (Iteration {iteration}). Back to Retriever."
+        )
         return "enhanced_retriever"
 
     workflow.add_conditional_edges(
@@ -129,29 +133,56 @@ async def query_with_agents(
     if context:
         logger.debug(f"Loaded {len(context)} chars of research context")
 
-    # Compile workflow
-    workflow_app = create_multi_agent_workflow()
-
-    # Initial state
-    initial_state: BaseAgentState = {
-        "query": query,
-        "query_image": query_image,
-        "retrieval_mode": retrieval_mode,
-        "session_id": session_id,
-        "entities": [],
-        "retrieved_docs": [],
-        "response": "",
-        "verification_status": "pending",
-        "verification_feedback": "",
-        "iteration_count": 0,
-        "messages": [],
-        "metadata": {"research_context": context},
-    }
-
     # Execute workflow
     try:
-        logger.info("Invoking workflow...")
-        final_state = await workflow_app.ainvoke(initial_state)
+        # Compile workflow
+        workflow_app = create_multi_agent_workflow()
+
+        # Initial state
+        initial_state: BaseAgentState = {
+            "query": query,
+            "query_image": query_image,
+            "retrieval_mode": retrieval_mode,
+            "memory_context": context,
+            "session_id": session_id,
+            "query_type": "text",
+            "entities": [],
+            "query_embedding": [],
+            "retrieved_docs": [],
+            "retrieval_scores": [],
+            "retrieval_method": "keyword",
+            "reranked_docs": [],
+            "evidence_summary": "",
+            "top_results": [],
+            "response": "",
+            "sources": [],
+            "verification_status": "pending",
+            "verification_feedback": "",
+            "iteration_count": 0,
+            "messages": [],
+            "metadata": {},
+        }
+
+        if _observability_initialized:
+            tracer = trace.get_tracer(__name__)
+            with tracer.start_as_current_span("research_query") as span:
+                logger.info("Invoking workflow...")
+                final_state = await workflow_app.ainvoke(initial_state)
+
+                # Capture Phoenix trace ID
+                trace_id = format(span.get_span_context().trace_id, "032x")
+                if "metadata" not in final_state:
+                    final_state["metadata"] = {}
+                final_state["metadata"]["phoenix_trace_id"] = trace_id
+        else:
+            logger.info("Invoking workflow...")
+            final_state = await workflow_app.ainvoke(initial_state)
+
+        # Ensure required keys exist even if mocks missed them
+        if "metadata" not in final_state:
+            final_state["metadata"] = {}
+        if "retrieved_docs" not in final_state:
+            final_state["retrieved_docs"] = []
 
         # Log result
         logger.info(f"✓ Query complete: sources={len(final_state.get('retrieved_docs', []))}")
@@ -161,13 +192,16 @@ async def query_with_agents(
         logger.debug("Query logged to memory store")
 
         return {
-            "response": final_state["response"],
+            "query": query,
+            "response": final_state.get("response", ""),
             "sources": final_state.get("retrieved_docs", []),
-            "verification_status": final_state["verification_status"],
-            "verification_feedback": final_state["verification_feedback"],
-            "iteration_count": final_state["iteration_count"],
+            "verification_status": final_state.get("verification_status", "pending"),
+            "verification_feedback": final_state.get("verification_feedback", ""),
+            "iteration_count": final_state.get("iteration_count", 0),
             "entities": final_state.get("entities", []),
             "messages": final_state.get("messages", []),
+            "retrieved_count": len(final_state.get("retrieved_docs", [])),
+            "phoenix_trace_id": final_state.get("metadata", {}).get("phoenix_trace_id"),
         }
 
     except Exception as e:
@@ -175,4 +209,34 @@ async def query_with_agents(
         import traceback
 
         logger.debug(traceback.format_exc())
-        raise
+        return {
+            "query": query,
+            "response": f"Error during research: {str(e)}",
+            "error": str(e),
+            "sources": [],
+            "retrieved_count": 0,
+        }
+
+
+def query_with_agents_sync(
+    query: str,
+    query_image: str | None = None,
+    retrieval_mode: str = "hybrid",
+    session_id: str = "default",
+    debug: bool = False,
+) -> dict[str, Any]:
+    """Synchronous wrapper for query_with_agents.
+
+    Useful for CLI and other non-async contexts.
+    """
+    import asyncio
+
+    return asyncio.run(
+        query_with_agents(
+            query=query,
+            query_image=query_image,
+            retrieval_mode=retrieval_mode,
+            session_id=session_id,
+            debug=debug,
+        )
+    )

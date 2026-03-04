@@ -11,9 +11,9 @@ from typing import Any
 from urllib.parse import urlparse
 
 import httpx
-from src.utils.logger import logger
 
 from src.agents.tools.base import Tool
+from src.utils.logger import logger
 
 # Shared constants
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_7_2) AppleWebKit/537.36"

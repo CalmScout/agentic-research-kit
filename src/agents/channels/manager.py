@@ -2,10 +2,9 @@
 
 import asyncio
 
-from src.utils.logger import logger
-
 from src.agents.channels.base import Channel, InboundMessage, OutboundMessage
 from src.agents.workflow import query_with_agents
+from src.utils.logger import logger
 
 
 class ChannelManager:

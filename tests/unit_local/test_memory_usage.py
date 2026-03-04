@@ -1,10 +1,10 @@
 #!/usr/bin/env python
 """Memory usage diagnostic test for Qwen3 models on 12GB GPU."""
 
-import torch
 import gc
 import logging
-from pathlib import Path
+
+import torch
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger(__name__)
@@ -145,7 +145,7 @@ def test_duplicate_loading():
     print_memory_stats("Test 4: Testing CURRENT pattern (loads model TWICE)")
 
     try:
-        from transformers import AutoModelForImageTextToText, AutoProcessor
+        from transformers import AutoModelForImageTextToText
 
         model_name = "Qwen/Qwen3-VL-2B-Instruct"
 
@@ -222,7 +222,10 @@ def test_combined_models():
     print_memory_stats("Test 6: Loading BOTH models (VL + Embedding)")
 
     try:
-        from transformers import AutoModelForImageTextToText, AutoProcessor, AutoModel, AutoTokenizer
+        from transformers import (
+            AutoModel,
+            AutoModelForImageTextToText,
+        )
 
         vl_model_name = "Qwen/Qwen3-VL-2B-Instruct"
         embed_model_name = "Qwen/Qwen3-VL-Embedding-2B"

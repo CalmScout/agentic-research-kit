@@ -1,7 +1,7 @@
 """Test script to verify Qwen3-VL-Embedding-2B model loading."""
 
 import torch
-from transformers import AutoModel, AutoTokenizer, Qwen3VLModel
+from transformers import AutoModel, Qwen3VLModel
 
 print("Testing Qwen3-VL-Embedding-2B model loading...")
 print(f"CUDA available: {torch.cuda.is_available()}")

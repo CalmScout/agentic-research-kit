@@ -6,10 +6,9 @@ Provides reranking of retrieved documents using score-based or model-based reran
 import json
 from typing import Any
 
-from src.utils.logger import logger
-
 from src.agents.reranker import get_reranker
 from src.agents.tools.base import Tool
+from src.utils.logger import logger
 
 
 class RerankerTool(Tool):

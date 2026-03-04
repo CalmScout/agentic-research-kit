@@ -7,14 +7,19 @@ Implements intelligent model selection with automatic fallback:
 """
 
 import logging
+from collections.abc import Callable, Sequence
 from typing import Any, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_core.prompt_values import PromptValue
+from langchain_core.runnables import Runnable
+from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
 
 from src.agents.providers import find_by_name
+from src.agents.utils import QwenToolParser
 from src.utils.config import Settings
 
 # Import Ollama support (optional)
@@ -34,9 +39,11 @@ class Qwen2LangChainWrapper(BaseChatModel):
     """LangChain-compatible wrapper for Qwen2TextLLM.
 
     Adapts the existing Qwen2TextLLM to work with LangChain's async interface.
+    Now supports tool calling via QwenToolParser.
     """
 
     qwen2_llm: Any | None = None  # Make qwen2_llm a class attribute for Pydantic
+    tools_defs: list[dict[str, Any]] | None = None
 
     model_config = {"arbitrary_types_allowed": True}
 
@@ -48,6 +55,70 @@ class Qwen2LangChainWrapper(BaseChatModel):
             **kwargs: Additional parameters
         """
         super().__init__(qwen2_llm=qwen2_llm, **kwargs)
+
+    def bind_tools(
+        self,
+        tools: Sequence[dict[str, Any] | type | Callable[..., Any] | BaseTool],
+        *,
+        tool_choice: str | None = None,
+        **kwargs: Any,
+    ) -> Runnable[
+        PromptValue
+        | str
+        | Sequence[BaseMessage | list[str] | tuple[str, str] | str | dict[str, Any]],
+        AIMessage,
+    ]:
+        """Bind tools to the model for tool calling.
+
+        Args:
+            tools: List of tool definitions
+            tool_choice: Optional tool choice
+            **kwargs: Additional parameters
+
+        Returns:
+            Model with tools bound (Runnable)
+        """
+        formatted_tools: list[dict[str, Any]] = []
+        for tool in tools:
+            if hasattr(tool, "args_schema"):
+                # Handle LangChain tools
+                t = cast(BaseTool, tool)
+                # Check if it's a Pydantic model with schema method
+                params: dict[str, Any] = {}
+                if t.args_schema is not None:
+                    if hasattr(t.args_schema, "schema"):
+                        params = t.args_schema.schema()
+                    elif hasattr(t.args_schema, "model_json_schema"):
+                        params = t.args_schema.model_json_schema()
+
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": t.name,
+                            "description": t.description,
+                            "parameters": params,
+                        },
+                    }
+                )
+            elif isinstance(tool, dict):
+                # Assume already formatted or simple dict
+                formatted_tools.append(tool)
+            elif callable(tool):
+                # Simple heuristic for callables
+                formatted_tools.append(
+                    {
+                        "type": "function",
+                        "function": {
+                            "name": getattr(tool, "__name__", "unknown"),
+                            "description": getattr(tool, "__doc__", "") or "",
+                            "parameters": {},  # Basic fallback
+                        },
+                    }
+                )
+
+        self.tools_defs = formatted_tools
+        return self
 
     def _generate(
         self,
@@ -67,22 +138,61 @@ class Qwen2LangChainWrapper(BaseChatModel):
         Returns:
             ChatResult with generation
         """
-        # Extract text from messages
-        prompt = "\n".join([str(m.content) for m in messages])
-
-        # Generate using Qwen2 (generate() accepts max_tokens param, maps to max_new_tokens internally)
         if self.qwen2_llm is None:
             raise ValueError("qwen2_llm is not initialized")
 
+        # Extract system and user messages
+        system_prompt = ""
+        user_messages = []
+
+        for m in messages:
+            if m.type == "system":
+                system_prompt = str(m.content)
+            else:
+                user_messages.append(m)
+
+        # For tool calling, we need the raw list of messages to pass to the processor
+        # But Qwen2TextLLM.generate expects a string prompt.
+        # We'll adapt it to handle tools if they are bound.
+
+        # Format tools if present
+        tools_to_use = kwargs.get("tools") or self.tools_defs
+
+        if tools_to_use:
+            # We need to use the processor directly to handle tools correctly
+            # Qwen2TextLLM encapsulates the model and tokenizer
+            processor = self.qwen2_llm.tokenizer  # Actually the tokenizer in Qwen2TextLLM
+
+            chat_messages = []
+            if system_prompt:
+                chat_messages.append({"role": "system", "content": system_prompt})
+
+            for m in user_messages:
+                role = "assistant" if m.type == "ai" else "user"
+                chat_messages.append({"role": role, "content": str(m.content)})
+
+            # Use chat template with tools
+            prompt = processor.apply_chat_template(
+                chat_messages, tools=tools_to_use, tokenize=False, add_generation_prompt=True
+            )
+        else:
+            # Basic prompt concatenation
+            prompt = "\n".join([str(m.content) for m in user_messages])
+
         response_text = self.qwen2_llm.generate(
             prompt,
+            system_prompt=system_prompt if not tools_to_use else None,
             max_tokens=self.qwen2_llm.max_new_tokens,
         )
 
-        # Create AIMessage
-        ai_message = AIMessage(content=response_text)
+        # Parse tool calls from response
+        tool_calls = QwenToolParser.parse_tool_calls(response_text)
+        cleaned_content = QwenToolParser.clean_text(response_text)
 
-        # Return ChatResult (newer LangChain API)
+        # Create AIMessage
+        ai_message = AIMessage(content=cleaned_content, tool_calls=tool_calls)
+
+        # Return ChatResult
         return ChatResult(generations=[ChatGeneration(message=ai_message)])
 
     async def _agenerate(

@@ -78,6 +78,13 @@ class ResearchTaskManager:
             registry.register(WebFetchTool())
             registry.register(HybridRetrieverTool())
 
+            # Bind tools to LLM if supported
+            # Use a generic runnable variable to handle different return types
+            runnable: Any = llm
+            if hasattr(llm, "bind_tools"):
+                logger.debug(f"Task [{task.id}] binding {len(registry)} tools to LLM")
+                runnable = llm.bind_tools(registry.get_definitions())
+
             # System prompt for background researcher
             system_prompt = f"""You are an expert Background Researcher for the Agentic Research Kit (ARK).
 Your goal is to perform a deep-dive research into the assigned task.
@@ -106,11 +113,8 @@ Workspace: {self.workspace}
 
             while iteration < max_iterations:
                 iteration += 1
-                # Use LangChain's bind_tools if supported, or handle manually
-                # For simplicity here, we'll use a basic turn-based approach
-                # (Ideally we'd use LangGraph or similar, but keeping it isolated for background)
-
-                response = await llm.ainvoke(messages)
+                # Use the bound runnable if available
+                response = await runnable.ainvoke(messages)
 
                 # Check for tool calls (this depends on the LLM implementation)
                 # If using ChatOpenAI, it will have tool_calls attribute

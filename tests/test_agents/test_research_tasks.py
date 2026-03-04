@@ -20,6 +20,9 @@ async def test_run_task_logic_success(manager):
     task = ResearchTask(id="task1", description="test")
 
     mock_llm = AsyncMock()
+    # Mock bind_tools to return self (required because it's called in _run_task_logic)
+    mock_llm.bind_tools = MagicMock(return_value=mock_llm)
+
     mock_response = MagicMock()
     mock_response.content = "Research report"
     mock_response.tool_calls = []
@@ -53,3 +56,4 @@ def test_list_tasks(manager):
     manager.create_task("t2")
     tasks = manager.list_tasks()
     assert len(tasks) == 2
+

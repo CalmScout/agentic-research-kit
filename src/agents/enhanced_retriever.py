@@ -136,9 +136,18 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # -------------------------------------------------------------
             # Step 5: Web Search Fallback/Augmentation
             # -------------------------------------------------------------
-            # If we have very few results, or if Brave key is available and query seems broad
-            if len(retrieved_docs) < 5 and settings.brave_api_key:
-                logger.info("Insufficient local results, triggering web search...")
+            # Trigger web search if:
+            # 1. Local results are very few (< 5)
+            # 2. Local results are low quality (avg score < 0.4)
+            # 3. Brave key is available
+            
+            avg_score = sum(retrieval_scores) / len(retrieval_scores) if retrieval_scores else 0
+            
+            should_trigger_web = (len(retrieved_docs) < 5 or avg_score < 0.4) and settings.brave_api_key
+            
+            if should_trigger_web:
+                reason = "Insufficient local results" if len(retrieved_docs) < 5 else f"Low quality local results (avg score: {avg_score:.2f})"
+                logger.info(f"{reason}, triggering web search...")
                 search_result = await registry.execute("web_search", {"query": query, "count": 5})
 
                 # Simple parsing of search results into document format

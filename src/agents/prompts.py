@@ -69,7 +69,7 @@ RESEARCH_TEMPLATE = PromptTemplate(
 
 Your goal is to answer the user's query based strictly on the provided documents. You must:
 - Synthesize information from multiple sources without making assumptions.
-- BE PRECISE: Do not attribute ownership or development of a technology (e.g. "Google's Willow chip") unless the source explicitly and directly states that ownership. 
+- BE PRECISE: Do not attribute ownership or development of a technology (e.g. "Google's Willow chip") unless the source explicitly and directly states that ownership.
 - USE EXACT TERMS: Do not use technical qualifiers like "fault-tolerant" or "stable" unless those exact words are used in the source to describe the finding.
 - ACKNOWLEDGE GAPS: If a source has a date (e.g. a blog post from Dec 2024), do not state the finding itself happened on that date unless the text explicitly says so.
 - Provide balanced perspectives on complex topics.""",

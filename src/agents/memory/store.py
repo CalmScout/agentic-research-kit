@@ -138,7 +138,7 @@ class MemoryStore:
 
             vector = embedder.embed_text(finding)
             data = [{"vector": vector, "text": finding, "timestamp": timestamp}]
-            
+
             # Use a more robust check for table existence
             table_list = self.db.list_tables()
             if self.table_name in table_list:

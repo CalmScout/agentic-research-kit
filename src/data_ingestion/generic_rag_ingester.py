@@ -8,7 +8,7 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -25,49 +25,56 @@ load_dotenv()
 # --- Standalone Wrapper Functions for LightRAG (Avoids deepcopy OOM) ---
 # Made ASYNC to satisfy LightRAG's internal execution model
 
+
 async def hf_llm_wrapper(prompt: str, system_prompt: str | None = None, **kwargs) -> str:
     """Standalone ASYNC LLM wrapper that uses vLLM API."""
+    from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
     from langchain_openai import ChatOpenAI
-    from langchain_core.messages import SystemMessage, HumanMessage
-    
+    from pydantic import SecretStr
+
     model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3.5-4B")
     llm = ChatOpenAI(
         model=model_name,
         base_url="http://localhost:8001/v1",
-        api_key="EMPTY",
+        api_key=SecretStr("EMPTY"),
         temperature=0.0,
-        timeout=120.0
+        timeout=120.0,
     )
-    
-    messages = []
+
+    messages: list[BaseMessage] = []
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
     messages.append(HumanMessage(content=prompt))
-    
+
     res = await llm.ainvoke(messages)
     return str(res.content)
+
 
 async def hf_vision_wrapper(image_paths: list[str], **kwargs) -> list[str]:
     """Standalone ASYNC vision wrapper. Note: Fallback implementation as we move to vLLM."""
     logger.warning("Vision wrapper called but not natively supported in vLLM text endpoint yet.")
     return ["Placeholder text for image"] * len(image_paths)
 
+
 async def hf_embedding_wrapper(texts: list[str], **kwargs) -> np.ndarray:
     """Standalone ASYNC embedding wrapper that uses TEI API."""
     from langchain_openai import OpenAIEmbeddings
-    
+    from pydantic import SecretStr
+
     model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
     embeddings = OpenAIEmbeddings(
         model=model_name,
         base_url="http://localhost:8082/v1",
-        api_key="EMPTY",
-        timeout=120.0
+        api_key=SecretStr("EMPTY"),
+        timeout=120.0,
     )
-    
+
     res = await embeddings.aembed_documents(texts)
     return np.array(res, dtype=np.float32)
 
+
 # --- End Wrapper Functions ---
+
 
 class GenericRAGIngester:
     """Format-agnostic RAG ingester with template-based content formatting."""
@@ -95,7 +102,9 @@ class GenericRAGIngester:
         self.torch_dtype = torch_dtype
 
         if self.use_gpu:
-            logger.info(f"✓ GPU acceleration info (not used directly, via API): {torch.cuda.get_device_name(0)}")
+            logger.info(
+                f"✓ GPU acceleration info (not used directly, via API): {torch.cuda.get_device_name(0)}"
+            )
 
         # Load model names from environment or use defaults
         self.vision_model_name = os.getenv("VISION_MODEL", "Qwen/Qwen3-VL-8B-Thinking")
@@ -104,10 +113,12 @@ class GenericRAGIngester:
 
         # Detect actual embedding dimension from API
         from langchain_openai import OpenAIEmbeddings
+        from pydantic import SecretStr
+
         embeddings = OpenAIEmbeddings(
             model=self.embedding_model_name,
             base_url="http://localhost:8082/v1",
-            api_key="EMPTY"
+            api_key=SecretStr("EMPTY"),
         )
         test_embedding = embeddings.embed_query("test")
         actual_embedding_dim = len(test_embedding)

@@ -42,7 +42,7 @@ def setup_observability() -> None:
         # Quick check to see if the collector is reachable
         with socket.create_connection((host, port), timeout=1.0):
             pass
-    except (socket.timeout, ConnectionRefusedError, socket.gaierror):
+    except (TimeoutError, ConnectionRefusedError, socket.gaierror):
         logger.warning(
             f"Phoenix collector not reachable at {host}:{port}. Skipping observability initialization."
         )

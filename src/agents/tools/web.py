@@ -187,13 +187,13 @@ class WebFetchTool(Tool):
                 "Sec-Fetch-Site": "cross-site",
                 "Sec-Fetch-User": "?1",
             }
-            
+
             async with httpx.AsyncClient(
-                follow_redirects=True, 
-                max_redirects=MAX_REDIRECTS, 
+                follow_redirects=True,
+                max_redirects=MAX_REDIRECTS,
                 timeout=30.0,
                 # Use standard HTTP/1.1 as some sites block HTTP/2 from certain clients
-                http2=False 
+                http2=False,
             ) as client:
                 # Simple retry logic for 403/500 errors
                 for attempt in range(2):
@@ -201,13 +201,15 @@ class WebFetchTool(Tool):
                         r = await client.get(url, headers=headers)
                         if r.status_code == 403 and attempt == 0:
                             # Try one more time with a mobile User-Agent
-                            headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+                            headers["User-Agent"] = (
+                                "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+                            )
                             headers["Sec-Ch-Ua-Mobile"] = "?1"
                             await asyncio.sleep(2)
                             continue
                         r.raise_for_status()
                         break
-                    except httpx.HTTPStatusError as e:
+                    except httpx.HTTPStatusError:
                         if attempt == 1:
                             raise
                         await asyncio.sleep(2)
@@ -223,8 +225,8 @@ class WebFetchTool(Tool):
                     # Robust XML sanitization: Remove all non-printable/control characters
                     # that are invalid in XML/HTML parsing (except \n, \r, \t)
                     # This prevents 'ValueError: All strings must be XML compatible'
-                    sanitized_text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]', '', r.text)
-                    
+                    sanitized_text = re.sub(r"[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]", "", r.text)
+
                     doc = Document(sanitized_text)
                     content = (
                         self._to_markdown(doc.summary())
@@ -234,7 +236,9 @@ class WebFetchTool(Tool):
                     text = f"# {doc.title()}\n\n{content}" if doc.title() else content
                     extractor = "readability"
                 except Exception as readability_err:
-                    logger.warning(f"Readability extraction failed: {readability_err}. Falling back to raw text.")
+                    logger.warning(
+                        f"Readability extraction failed: {readability_err}. Falling back to raw text."
+                    )
                     text, extractor = _strip_tags(r.text), "strip_tags_fallback"
             else:
                 text, extractor = r.text, "raw"

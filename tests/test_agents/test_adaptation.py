@@ -33,7 +33,7 @@ async def test_provider_registry_and_selector():
             assert llm is not None
             mock_chat.assert_called_once()
             args, kwargs = mock_chat.call_args
-            assert kwargs["api_key"] == "test-key"
+            assert kwargs["api_key"].get_secret_value() == "test-key"
             assert kwargs["model"] == "deepseek-chat"
 
 

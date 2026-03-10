@@ -26,7 +26,8 @@ async def test_simple_retriever_success():
             return mock_open(read_data=json.dumps(entity_data))()
         return mock_open()()
 
-    with patch("builtins.open", side_effect=side_effect):
+    with patch("builtins.open", side_effect=side_effect), \
+         patch("os.path.exists", return_value=True):
         result = await simple_retriever("climate change", top_k=5)
 
         assert result["retrieval_method"] == "keyword"
@@ -38,7 +39,8 @@ async def test_simple_retriever_success():
 async def test_simple_retriever_no_match():
     docs_data = {"doc1": {"content": "abc", "file_path": "p1"}}
 
-    with patch("builtins.open", mock_open(read_data=json.dumps(docs_data))):
+    with patch("builtins.open", mock_open(read_data=json.dumps(docs_data))), \
+         patch("os.path.exists", return_value=True):
         # This will fail for subsequent opens if not handled, but let's assume it returns empty for them
         result = await simple_retriever("xyz")
         assert len(result["retrieved_docs"]) == 0

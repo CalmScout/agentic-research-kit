@@ -20,22 +20,29 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 class MockEmbeddingModel:
     """Mock embedding model for testing."""
 
-    def __init__(self, fixed_value: float = 0.0):
+    def __init__(self, fixed_value: float = 0.0, dimension: int = 2048):
         """Initialize with fixed value for embeddings.
 
         Args:
             fixed_value: Value to use for all embedding dimensions
+            dimension: Dimension of the embedding vector
         """
         self.fixed_value = fixed_value
+        self._dim = dimension
+
+    @property
+    def dimension(self) -> int:
+        """Return embedding dimension."""
+        return self._dim
 
     def embed_text(self, text: str) -> list[float]:
         """Return fixed embedding vector for text."""
-        # 2048-dim vector (Qwen3-VL-Embedding-2B)
-        return [self.fixed_value] * 2048
+        # Returns vector of specified dimension
+        return [self.fixed_value] * self._dim
 
     def embed_multimodal(self, text: str, image_path: str) -> list[float]:
         """Return fixed embedding for multimodal content."""
-        return [self.fixed_value] * 2048
+        return [self.fixed_value] * self._dim
 
 
 class MockLLM:

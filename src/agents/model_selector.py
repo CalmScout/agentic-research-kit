@@ -8,12 +8,14 @@ Implements intelligent model selection with automatic fallback:
 
 import logging
 import os
+import re
 from typing import Any, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
+from langchain_core.outputs import ChatResult
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, AIMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
+from pydantic import SecretStr
 
 from src.agents.providers import find_by_name
 from src.utils.config import Settings
@@ -21,21 +23,20 @@ from src.utils.config import Settings
 logger = logging.getLogger(__name__)
 
 
-import re
-
 class ThinkingProcessStripper(ChatOpenAI):
     """Wrapper that strips 'Thinking Process:' and '<thought>' blocks from LLM responses.
-    
+
     This ensures that internal JSON parsers (like those in LightRAG or the agents)
     don't fail when the model outputs its reasoning chain.
     """
+
     def _strip_thinking(self, content: str) -> str:
         if not content:
             return content
-            
+
         # 1. Strip <thought>...</thought> blocks
-        content = re.sub(r'<thought>.*?</thought>', '', content, flags=re.DOTALL)
-        
+        content = re.sub(r"<thought>.*?</thought>", "", content, flags=re.DOTALL)
+
         # 2. Aggressive JSON extraction: if string contains '{' and '}', try to extract just that
         # This fixes issues where LightRAG or other tools expect raw JSON but get conversational prefix
         if "{" in content and "}" in content:
@@ -59,21 +60,25 @@ class ThinkingProcessStripper(ChatOpenAI):
                 content = after_thinking.split("\n\n", 1)[1]
             else:
                 content = after_thinking
-                    
+
         return content.strip()
 
     def _generate(self, *args: Any, **kwargs: Any) -> ChatResult:
         result = super()._generate(*args, **kwargs)
         for generation in result.generations:
             if isinstance(generation.message, AIMessage):
-                generation.message.content = self._strip_thinking(cast(str, generation.message.content))
+                generation.message.content = self._strip_thinking(
+                    cast(str, generation.message.content)
+                )
         return result
 
     async def _agenerate(self, *args: Any, **kwargs: Any) -> ChatResult:
         result = await super()._agenerate(*args, **kwargs)
         for generation in result.generations:
             if isinstance(generation.message, AIMessage):
-                generation.message.content = self._strip_thinking(cast(str, generation.message.content))
+                generation.message.content = self._strip_thinking(
+                    cast(str, generation.message.content)
+                )
         return result
 
 
@@ -109,26 +114,29 @@ class ModelSelector:
         if self._local_llm is None:
             try:
                 import httpx
+
                 logger.info("Initializing local Qwen3.5-4B model via vLLM...")
-                
+
                 # Fast check if vLLM server is alive to trigger fallback quickly if down
                 try:
                     response = httpx.get("http://localhost:8001/v1/models", timeout=2.0)
                     response.raise_for_status()
                 except Exception as e:
-                    raise RuntimeError(f"Local vLLM server is not reachable at http://localhost:8001: {e}. Ensure the 'vllm' docker container is running.")
-                
+                    raise RuntimeError(
+                        f"Local vLLM server is not reachable at http://localhost:8001: {e}. Ensure the 'vllm' docker container is running."
+                    ) from e
+
                 # We use LangChain's standard ChatOpenAI pointing to the local vLLM server
                 # Native vLLM handles <thought> blocks and continuous batching efficiently
                 # Wrapped in ThinkingProcessStripper for clean JSON/text extraction
                 self._local_llm = ThinkingProcessStripper(
                     model="Qwen/Qwen3.5-4B",
                     base_url="http://localhost:8001/v1",
-                    api_key="EMPTY",  # vLLM default doesn't require a real API key
+                    api_key=SecretStr("EMPTY"),  # vLLM default doesn't require a real API key
                     temperature=0.0,
                     timeout=120.0,
                 )
-                
+
                 logger.info("✓ Local Qwen3.5-4B model initialized via vLLM")
             except Exception as e:
                 logger.error(f"Failed to initialize local LLM: {e}")
@@ -184,7 +192,7 @@ class ModelSelector:
 
             llm = ChatOpenAI(
                 model=model_name,
-                api_key=cast(Any, api_key),
+                api_key=SecretStr(api_key) if isinstance(api_key, str) else api_key,
                 base_url=base_url if base_url else None,
                 temperature=0.0,
                 timeout=120.0,

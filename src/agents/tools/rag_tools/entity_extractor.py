@@ -7,7 +7,7 @@ import json
 import re
 from typing import Any
 
-from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
 from src.agents.model_selector import get_model_selector
 from src.agents.tools.base import Tool
@@ -69,8 +69,10 @@ class EntityExtractorTool(Tool):
 
             # Invoke LLM
             messages = [
-                SystemMessage(content="You are a strict entity extractor. Extract ONLY a comma-separated list of entities (people, organizations, concepts). DO NOT include any introductory text, thinking process, or headers. If no entities, return 'none'."),
-                HumanMessage(content=prompt)
+                SystemMessage(
+                    content="You are a strict entity extractor. Extract ONLY a comma-separated list of entities (people, organizations, concepts). DO NOT include any introductory text, thinking process, or headers. If no entities, return 'none'."
+                ),
+                HumanMessage(content=prompt),
             ]
             response = await llm.ainvoke(messages)
 
@@ -79,50 +81,86 @@ class EntityExtractorTool(Tool):
             if isinstance(entities_text, str):
                 # The llm instance from model_selector is already wrapped in ThinkingProcessStripper,
                 # but we add an extra layer of safety here for specific extraction artifacts.
-                
+
                 # Remove common reasoning headers that might leak
-                entities_text = re.sub(r'^(Thinking Process:|Analysis:|Entities:|Output:).*$', '', entities_text, flags=re.MULTILINE | re.IGNORECASE)
-                
+                entities_text = re.sub(
+                    r"^(Thinking Process:|Analysis:|Entities:|Output:).*$",
+                    "",
+                    entities_text,
+                    flags=re.MULTILINE | re.IGNORECASE,
+                )
+
                 # If we still have multiple lines, try to find the one that looks like a list
                 if "\n" in entities_text.strip():
-                    lines = [l.strip() for l in entities_text.split("\n") if l.strip()]
+                    lines = [line.strip() for line in entities_text.split("\n") if line.strip()]
                     # Prefer lines with commas
-                    csv_lines = [l for l in lines if "," in l and not l.startswith("1.")]
+                    csv_lines = [
+                        line for line in lines if "," in line and not line.startswith("1.")
+                    ]
                     if csv_lines:
                         entities_text = csv_lines[-1]
                     else:
                         entities_text = lines[-1]
 
                 entities_text = entities_text.strip()
-                
+
                 if not entities_text or entities_text.lower() == "none":
-                    entities = []
+                    entities: list[str] = []
                 else:
                     # Clean up each entity (remove bullets, quotes, etc)
                     entities = []
                     # STOPWORDS: Common reasoning artifacts or conversational filler to ignore
                     blacklist = {
-                        "wait", "actually", "thinking", "process", "analysis", "entities", 
-                        "output", "extract", "found", "sure", "ok", "okay", "here", 
-                        "none", "the", "a", "an", "this", "that", "background research",
-                        "however", "usually", "but", "also", "therefore", "thus", "hence",
-                        "research", "query", "input", "seems", "based", "according", "to"
+                        "wait",
+                        "actually",
+                        "thinking",
+                        "process",
+                        "analysis",
+                        "entities",
+                        "output",
+                        "extract",
+                        "found",
+                        "sure",
+                        "ok",
+                        "okay",
+                        "here",
+                        "none",
+                        "the",
+                        "a",
+                        "an",
+                        "this",
+                        "that",
+                        "background research",
+                        "however",
+                        "usually",
+                        "but",
+                        "also",
+                        "therefore",
+                        "thus",
+                        "hence",
+                        "research",
+                        "query",
+                        "input",
+                        "seems",
+                        "based",
+                        "according",
+                        "to",
                     }
-                    
-                    for e in entities_text.split(","):
+
+                    for entity in entities_text.split(","):
                         # Remove leading numbers (e.g., "1. Quantum")
-                        clean_e = re.sub(r'^\d+[\.\)]\s*', '', e.strip())
+                        clean_e = re.sub(r"^\d+[\.\)]\s*", "", entity.strip())
                         clean_e = clean_e.strip('"').strip("'").strip("*").strip("- ")
-                        
-                        # VALIDATION: 
+
+                        # VALIDATION:
                         # 1. Not empty or too short
                         # 2. Not in blacklist
                         # 3. Not a full sentence (max 5 words)
                         if (
-                            clean_e and 
-                            clean_e.lower() not in blacklist and 
-                            len(clean_e) > 1 and
-                            clean_e.count(" ") < 5
+                            clean_e
+                            and clean_e.lower() not in blacklist
+                            and len(clean_e) > 1
+                            and clean_e.count(" ") < 5
                         ):
                             entities.append(clean_e)
             else:

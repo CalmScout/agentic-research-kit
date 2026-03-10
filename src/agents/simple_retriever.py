@@ -40,7 +40,8 @@ async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
                 vdb_data = json.load(f)
                 vdb_data.get("matrix", [])
                 from src.agents.embeddings import embedder
-                vdb_data.get("embedding_dim", embedder._dim)
+
+                vdb_data.get("embedding_dim", embedder.dimension)
 
         # Load entity chunks for knowledge graph traversal
         with open("./rag_storage/kv_store_entity_chunks.json") as f:

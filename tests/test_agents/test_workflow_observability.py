@@ -19,15 +19,16 @@ async def test_setup_observability_enabled():
     with patch.dict(os.environ, {"PHOENIX_ENABLED": "true"}):
         with patch("openinference.instrumentation.langchain.LangChainInstrumentor") as mock_instrumentor:
             with patch("phoenix.otel.register") as mock_register:
-                # Reset initialized flag for test
-                import src.utils.observability
-                src.utils.observability._observability_initialized = False
+                with patch("socket.create_connection") as mock_socket:
+                    # Reset initialized flag for test
+                    import src.utils.observability
+                    src.utils.observability._observability_initialized = False
 
-                setup_observability()
+                    setup_observability()
 
-                assert src.utils.observability._observability_initialized is True
-                mock_register.assert_called_once()
-                mock_instrumentor.return_value.instrument.assert_called_once()
+                    assert src.utils.observability._observability_initialized is True
+                    mock_register.assert_called_once()
+                    mock_instrumentor.return_value.instrument.assert_called_once()
 
     # Clean up settings cache after test
     clear_settings_cache()

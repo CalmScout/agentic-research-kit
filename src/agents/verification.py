@@ -90,14 +90,12 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
         )
 
         llm_messages = [
-            SystemMessage(
-                content="""You are a pragmatic fact-checking AI. Output ONLY JSON. 
+            SystemMessage(content="""You are a pragmatic fact-checking AI. Output ONLY JSON.
 Rules:
-1. Material Integrity: Only flag hallucinations if they are factually wrong or misleading (e.g. wrong dates, wrong companies, fabricated numbers). 
-2. Pragmatism: If a source describes a chip in a company blog, attributing it to that company is acceptable. 
-3. Research Gaps: If information is missing from sources, flag it as a 'gap', not a 'hallucination'. 
-4. Efficiency: Avoid looping for minor stylistic differences."""
-            ),
+1. Material Integrity: Only flag hallucinations if they are factually wrong or misleading (e.g. wrong dates, wrong companies, fabricated numbers).
+2. Pragmatism: If a source describes a chip in a company blog, attributing it to that company is acceptable.
+3. Research Gaps: If information is missing from sources, flag it as a 'gap', not a 'hallucination'.
+4. Efficiency: Avoid looping for minor stylistic differences."""),
             HumanMessage(content=prompt),
         ]
 

@@ -19,7 +19,7 @@ def test_embed_text(service):
 def test_embed_image(service):
     # Now it returns a vector of zeros
     result = service.embed_image("test.jpg")
-    assert result == [0.0] * 2048
+    assert result == [0.0] * 1024
 
 def test_embed_multimodal(service):
     with (

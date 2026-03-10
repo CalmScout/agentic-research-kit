@@ -79,7 +79,7 @@ async def test_enhanced_retriever_multimodal_query(agent_state_minimal, mock_llm
 
 
 @pytest.mark.asyncio
-async def test_enhanced_retriever_entity_extraction(agent_state_minimal):
+async def test_enhanced_retriever_entity_extraction(agent_state_minimal, mock_embedding_model):
     """Test entity extraction from query."""
     agent_state_minimal["query"] = "Is climate change caused by humans?"
 
@@ -96,7 +96,7 @@ async def test_enhanced_retriever_entity_extraction(agent_state_minimal):
 
         mock_execute.side_effect = side_effect
 
-        with patch("src.agents.enhanced_retriever.embedder", Mock()):
+        with patch("src.agents.enhanced_retriever.embedder", mock_embedding_model):
             # Execute agent
             result = await enhanced_retriever_agent(agent_state_minimal)
 

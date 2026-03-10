@@ -11,9 +11,12 @@ from pathlib import Path
 from typing import Any, cast
 
 import numpy as np
+from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
+from langchain_openai import OpenAIEmbeddings
 from lightrag import LightRAG, QueryParam
 from lightrag.kg import STORAGE_IMPLEMENTATIONS, STORAGES
 from lightrag.utils import EmbeddingFunc, lazy_external_import
+from pydantic import SecretStr
 
 from src.agents.lancedb_storage import (
     LanceDBDocStatusStorage,
@@ -21,8 +24,6 @@ from src.agents.lancedb_storage import (
     LanceDBVectorDBStorage,
 )
 from src.agents.model_selector import ThinkingProcessStripper
-from langchain_openai import OpenAIEmbeddings
-from langchain_core.messages import SystemMessage, HumanMessage
 
 # Register custom LanceDB storages names
 STORAGES["LanceDBKVStorage"] = "LanceDBKVStorage"
@@ -66,8 +67,9 @@ logger = logging.getLogger(__name__)
 # --- Standalone Wrapper Functions for LightRAG (Avoids deepcopy/pickle issues) ---
 
 # Global singletons for the wrappers to avoid recreation overhead
-_wrapper_llm = None
-_wrapper_embeddings = None
+_wrapper_llm: ThinkingProcessStripper | None = None
+_wrapper_embeddings: OpenAIEmbeddings | None = None
+
 
 async def direct_hf_llm_wrapper(prompt: str, system_prompt: str | None = None, **kwargs) -> str:
     """Standalone LLM wrapper for LightRAG using singleton client and json_repair."""
@@ -77,30 +79,31 @@ async def direct_hf_llm_wrapper(prompt: str, system_prompt: str | None = None, *
         _wrapper_llm = ThinkingProcessStripper(
             model=model_name,
             base_url="http://localhost:8001/v1",
-            api_key="EMPTY",
+            api_key=SecretStr("EMPTY"),
             temperature=0.0,
             timeout=120.0,
-            max_tokens=1024 
         )
-    
-    messages = []
+
+    messages: list[BaseMessage] = []
     if system_prompt:
         messages.append(SystemMessage(content=system_prompt))
     messages.append(HumanMessage(content=prompt))
-    
+
     res = await _wrapper_llm.ainvoke(messages)
     content = str(res.content)
-    
-    # If the prompt looks like it's asking for JSON (common in LightRAG), 
+
+    # If the prompt looks like it's asking for JSON (common in LightRAG),
     # use json_repair to ensure it's clean for their internal parser.
     if any(keyword in prompt.lower() for keyword in ["json", "format:", "{"]):
         try:
             import json_repair
+
             return json_repair.repair_json(content)
         except ImportError:
             pass
-            
+
     return content
+
 
 async def direct_hf_embedding_wrapper(texts: list[str], **kwargs) -> np.ndarray:
     """Standalone embedding wrapper for LightRAG using singleton client."""
@@ -110,14 +113,16 @@ async def direct_hf_embedding_wrapper(texts: list[str], **kwargs) -> np.ndarray:
         _wrapper_embeddings = OpenAIEmbeddings(
             model=model_name,
             base_url="http://localhost:8082/v1",
-            api_key="EMPTY",
+            api_key=SecretStr("EMPTY"),
             timeout=120.0,
         )
-    
+
     res = await _wrapper_embeddings.aembed_documents(texts)
     return np.array(res, dtype=np.float32)
 
+
 # --- End Wrapper Functions ---
+
 
 class DirectLightRAGRetriever:
     """Direct LightRAG retriever using API embedding models.
@@ -140,30 +145,29 @@ class DirectLightRAGRetriever:
     def get_rag(self) -> LightRAG:
         """Get or create LightRAG instance."""
         if self._rag is None:
-            logger.info(
-                f"Initializing LightRAG with API models (working_dir: {self.working_dir})"
-            )
+            logger.info(f"Initializing LightRAG with API models (working_dir: {self.working_dir})")
 
             # Detect dimension if not already set (one-time check)
             if self._embedding_dim == 1024:
                 try:
-                    import httpx
                     model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
                     base_url = os.getenv("EMBEDDING_API_URL", "http://localhost:8082/v1")
                     logger.debug(f"Detecting embedding dimension for {model_name}...")
-                    
+
                     # Try info endpoint or test query
                     test_embeddings = OpenAIEmbeddings(
                         model=model_name,
                         base_url=base_url,
-                        api_key="EMPTY",
-                        timeout=10.0
+                        api_key=SecretStr("EMPTY"),
+                        timeout=10.0,
                     )
                     test_vec = test_embeddings.embed_query("test")
                     self._embedding_dim = len(test_vec)
                     logger.info(f"✓ Detected LightRAG embedding dimension: {self._embedding_dim}")
                 except Exception as e:
-                    logger.warning(f"Could not detect embedding dimension for LightRAG: {e}. Defaulting to 1024.")
+                    logger.warning(
+                        f"Could not detect embedding dimension for LightRAG: {e}. Defaulting to 1024."
+                    )
                     self._embedding_dim = 1024
 
             # Create embedding function using standalone wrapper.

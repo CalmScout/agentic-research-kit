@@ -17,13 +17,6 @@ from dotenv import load_dotenv
 from lightrag import LightRAG
 from lightrag.utils import EmbeddingFunc
 
-# Import GPU models and singletons
-from src.utils.vision_embedding import (
-    get_embedding_model,
-    get_text_llm,
-    get_vision_model,
-)
-
 logger = logging.getLogger(__name__)
 
 # Load environment variables
@@ -32,54 +25,49 @@ load_dotenv()
 # --- Standalone Wrapper Functions for LightRAG (Avoids deepcopy OOM) ---
 # Made ASYNC to satisfy LightRAG's internal execution model
 
-
 async def hf_llm_wrapper(prompt: str, system_prompt: str | None = None, **kwargs) -> str:
-    """Standalone ASYNC LLM wrapper that uses singletons to avoid capturing 'self'."""
-    model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3-8B")
-    device = os.getenv("DEVICE", "cuda")
-    torch_dtype = os.getenv("TORCH_DTYPE", "float16")
-
-    # Use singleton to get/load model
-    llm = get_text_llm(model_name=model_name, device=device, torch_dtype=torch_dtype)
-    return cast(str, cast(Any, llm).generate(prompt, system_prompt=system_prompt))
-
+    """Standalone ASYNC LLM wrapper that uses vLLM API."""
+    from langchain_openai import ChatOpenAI
+    from langchain_core.messages import SystemMessage, HumanMessage
+    
+    model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3.5-4B")
+    llm = ChatOpenAI(
+        model=model_name,
+        base_url="http://localhost:8001/v1",
+        api_key="EMPTY",
+        temperature=0.0,
+        timeout=120.0
+    )
+    
+    messages = []
+    if system_prompt:
+        messages.append(SystemMessage(content=system_prompt))
+    messages.append(HumanMessage(content=prompt))
+    
+    res = await llm.ainvoke(messages)
+    return str(res.content)
 
 async def hf_vision_wrapper(image_paths: list[str], **kwargs) -> list[str]:
-    """Standalone ASYNC vision wrapper that uses singletons to avoid capturing 'self'."""
-    model_name = os.getenv("VISION_MODEL", "Qwen/Qwen3-VL-8B-Thinking")
-    device = os.getenv("DEVICE", "cuda")
-    torch_dtype = os.getenv("TORCH_DTYPE", "float16")
-
-    vision_model = get_vision_model(model_name=model_name, device=device, torch_dtype=torch_dtype)
-    return cast(list[str], cast(Any, vision_model).encode_images(image_paths))
-
+    """Standalone ASYNC vision wrapper. Note: Fallback implementation as we move to vLLM."""
+    logger.warning("Vision wrapper called but not natively supported in vLLM text endpoint yet.")
+    return ["Placeholder text for image"] * len(image_paths)
 
 async def hf_embedding_wrapper(texts: list[str], **kwargs) -> np.ndarray:
-    """Standalone ASYNC embedding wrapper that uses singletons to avoid capturing 'self'."""
-    model_name = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
-    device = os.getenv("DEVICE", "cuda")
-    torch_dtype = os.getenv("TORCH_DTYPE", "float16")
-
-    embedding_model = get_embedding_model(
-        model_name=model_name, device=device, torch_dtype=torch_dtype
+    """Standalone ASYNC embedding wrapper that uses TEI API."""
+    from langchain_openai import OpenAIEmbeddings
+    
+    model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+    embeddings = OpenAIEmbeddings(
+        model=model_name,
+        base_url="http://localhost:8082/v1",
+        api_key="EMPTY",
+        timeout=120.0
     )
-
-    # Handle both text and multimodal models
-    if hasattr(embedding_model, "embed_text_batch"):
-        embeddings = cast(Any, embedding_model).embed_text_batch(texts)
-    elif hasattr(embedding_model, "embed_text"):
-        embeddings = [cast(Any, embedding_model).embed_text(t) for t in texts]
-        embeddings = np.array(embeddings)
-    else:
-        # Multimodal model - use text encoding
-        embeddings = [cast(Any, embedding_model).encode(text) for text in texts]
-        embeddings = np.array(embeddings)
-
-    return cast(np.ndarray, embeddings)
-
+    
+    res = await embeddings.aembed_documents(texts)
+    return np.array(res, dtype=np.float32)
 
 # --- End Wrapper Functions ---
-
 
 class GenericRAGIngester:
     """Format-agnostic RAG ingester with template-based content formatting."""
@@ -94,35 +82,35 @@ class GenericRAGIngester:
         device: str = "cuda",
         torch_dtype: str = "float16",
     ):
-        """Initialize generic RAG ingester with GPU support."""
+        """Initialize generic RAG ingester with API support."""
         self.working_dir = working_dir
         # Fallback template if specific fields like 'title' are missing
         self.content_template = content_template
         self.content_fields = content_fields or ["content"]
         self.metadata_fields = metadata_fields or []
 
-        # Check GPU availability
+        # Check GPU availability (just for logging now)
         self.use_gpu = use_gpu and torch.cuda.is_available()
         self.device = device if self.use_gpu else "cpu"
         self.torch_dtype = torch_dtype
 
         if self.use_gpu:
-            logger.info(f"✓ GPU acceleration enabled: {torch.cuda.get_device_name(0)}")
-            logger.info(f"  VRAM: {torch.cuda.get_device_properties(0).total_memory / 1e9:.1f} GB")
-        else:
-            logger.warning("GPU not available, using CPU (slower)")
+            logger.info(f"✓ GPU acceleration info (not used directly, via API): {torch.cuda.get_device_name(0)}")
 
         # Load model names from environment or use defaults
         self.vision_model_name = os.getenv("VISION_MODEL", "Qwen/Qwen3-VL-8B-Thinking")
-        self.text_llm_model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3-8B")
-        self.embedding_model_name = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-8B")
+        self.text_llm_model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3.5-4B")
+        self.embedding_model_name = os.getenv("EMBEDDING_MODEL", "Qwen/Qwen3-VL-Embedding-2B")
 
-        # Detect actual embedding dimension from model
-        embedding_model = get_embedding_model(
-            model_name=self.embedding_model_name, device=self.device, torch_dtype=self.torch_dtype
+        # Detect actual embedding dimension from API
+        from langchain_openai import OpenAIEmbeddings
+        embeddings = OpenAIEmbeddings(
+            model=self.embedding_model_name,
+            base_url="http://localhost:8082/v1",
+            api_key="EMPTY"
         )
-        test_embedding = embedding_model.embed_text("test")
-        actual_embedding_dim = test_embedding.shape[0]
+        test_embedding = embeddings.embed_query("test")
+        actual_embedding_dim = len(test_embedding)
         logger.info(f"✓ Detected embedding dimension: {actual_embedding_dim}")
 
         # Setup LightRAG with async standalone functions
@@ -137,9 +125,11 @@ class GenericRAGIngester:
             working_dir=working_dir,
             llm_model_func=hf_llm_wrapper,
             embedding_func=self.embedding_func,
+            embedding_batch_num=1,  # Serial embedding to save RAM
+            embedding_func_max_async=1,  # CRITICAL: Prevent OOM by using 1 worker locally
         )
 
-        logger.info("✓ LightRAG initialized (using async wrappers to prevent OOM)")
+        logger.info("✓ LightRAG initialized (using async API wrappers)")
 
     async def ingest_df(
         self, df: pd.DataFrame, id_column: str | None = None, images: dict | None = None
@@ -263,6 +253,5 @@ class GenericRAGIngester:
 
     async def close(self):
         """Clean up resources."""
-        if torch.cuda.is_available():
-            torch.cuda.empty_cache()
-            logger.info("✓ GPU cache cleared")
+        # API doesn't require local cleanup
+        pass

@@ -43,15 +43,19 @@ To get the absolute maximum out of available hardware—whether that is a local 
 1.  **Local Inference Server (vLLM):**
     Instead of loading HuggingFace models directly in Python via `transformers`, run a highly optimized inference engine like **vLLM** alongside the ARK application. 
     *   vLLM provides an OpenAI-compatible API endpoint (e.g., `http://localhost:8000/v1`).
-    *   This unlocks continuous batching and PagedAttention, doubling or tripling hardware utilization.
+    *   This unlocks continuous batching and PagedAttention, doubling hardware utilization.
+    *   **12GB Strategy:** Use `--gpu-memory-utilization 0.4` and `--max-model-len 4096` to reserve only ~4.8GB for the reasoning engine, allowing room for other models.
 
 2.  **Unified Client Interface:**
     Refactor `src/agents/model_selector.py` so that **all** interactions go through `ChatOpenAI`. 
     *   For **DeepSeek**: Use DeepSeek API keys and endpoints.
     *   For **Local Qwen3.5**: Point the `ChatOpenAI` client to the local vLLM endpoint.
+    *   **Native Reasoning:** Leverage vLLM's native parsing for Qwen3.5 `<thought>` blocks.
 
-3.  **Dedicated Embedding Microservices:**
-    For the remaining models (`Qwen3-VL-Embedding-2B`), utilize a dedicated embedding microservice like Text Embeddings Inference (TEI). This completely removes heavy PyTorch dependencies from the LangGraph agents.
+3.  **Dedicated Embedding Microservices (TEI):**
+    For the remaining models (`Qwen3-VL-Embedding-2B` and `Qwen3-VL-Reranker-2B`), utilize **Text Embeddings Inference (TEI)**.
+    *   TEI is Rust-based and significantly more memory-efficient than PyTorch.
+    *   This allows the RAG pipeline to run with near-zero Python/Transformers overhead.
 
 ### Conclusion
 By adopting an **API-first architecture** internally, ARK can seamlessly transition from a local 12GB laptop to a cloud deployment with DeepSeek or a dedicated HPC cluster running massive Qwen3.5-35B MoE models, all without changing a single line of LangGraph or RAG agent code.
@@ -75,13 +79,13 @@ By adopting an **API-first architecture** internally, ARK can seamlessly transit
 ### Phase 2: Inference Decoupling (Immediate Focus)
 **Goal:** Prepare for Cloud/HPC scaling and external APIs by removing heavy PyTorch management from the application.
 
-1. [ ] **Spin up Local vLLM Server:**
-   Provide documentation for running an OpenAI-compatible inference server locally (e.g., vLLM).
-2. [ ] **Refactor `model_selector.py`:**
+1. [x] **Spin up Local vLLM/TEI Cluster:**
+   Provide a `docker-compose.yml` to run Qwen3.5-4B (vLLM) and Qwen3-VL (TEI) in isolated containers. *(See [VLLM Integration](VLLM_INTEGRATION.md) for details).*
+2. [x] **Refactor `model_selector.py`:**
    Modify local LLM routing to use a standard LangChain `ChatOpenAI` client pointed at the local vLLM endpoint instead of `Qwen2LangChainWrapper`.
 3. [ ] **Strip out Transformers:**
    Systematically remove `Qwen2TextLLM`, `UnifiedQwen35`, and custom wrappers once the API transition is stable.
 
 ---
 
-**Last Updated**: 2026-03-04 (Updated to reflect Phase 1 completion and Qwen3.5-4B integration)
+**Last Updated**: 2026-03-10 (Updated to reflect completed vLLM integration and API-first design implementation)

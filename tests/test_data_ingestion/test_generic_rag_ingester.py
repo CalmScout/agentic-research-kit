@@ -6,11 +6,10 @@ import pytest
 
 from src.data_ingestion.generic_rag_ingester import GenericRAGIngester
 
-
 @pytest.fixture
 def mock_embedding_model():
     model = MagicMock()
-    model.embed_text.return_value = np.zeros(1536)
+    model.embed_query.return_value = [0.0] * 1536
     return model
 
 @pytest.fixture
@@ -20,23 +19,23 @@ def mock_rag():
     rag.ainsert = AsyncMock()
     return rag
 
-@patch("src.data_ingestion.generic_rag_ingester.get_embedding_model")
 @patch("src.data_ingestion.generic_rag_ingester.LightRAG")
-def test_ingester_init(mock_lightrag, mock_get_model, mock_embedding_model):
-    mock_get_model.return_value = mock_embedding_model
+@patch("langchain_openai.OpenAIEmbeddings")
+def test_ingester_init(mock_embeddings_class, mock_lightrag, mock_embedding_model):
+    mock_embeddings_class.return_value = mock_embedding_model
     mock_lightrag.return_value = MagicMock()
 
     ingester = GenericRAGIngester(working_dir="./test_rag")
 
     assert ingester.working_dir == "./test_rag"
-    mock_get_model.assert_called()
+    mock_embeddings_class.assert_called()
     mock_lightrag.assert_called()
 
 @pytest.mark.asyncio
-@patch("src.data_ingestion.generic_rag_ingester.get_embedding_model")
 @patch("src.data_ingestion.generic_rag_ingester.LightRAG")
-async def test_ingest_df(mock_lightrag, mock_get_model, mock_embedding_model):
-    mock_get_model.return_value = mock_embedding_model
+@patch("langchain_openai.OpenAIEmbeddings")
+async def test_ingest_df(mock_embeddings_class, mock_lightrag, mock_embedding_model):
+    mock_embeddings_class.return_value = mock_embedding_model
     rag_instance = MagicMock()
     rag_instance.initialize_storages = AsyncMock()
     rag_instance.ainsert = AsyncMock()
@@ -53,7 +52,7 @@ async def test_ingest_df(mock_lightrag, mock_get_model, mock_embedding_model):
 
 def test_format_content():
     # We need to mock the init to avoid model loading
-    with patch("src.data_ingestion.generic_rag_ingester.get_embedding_model"), \
+    with patch("langchain_openai.OpenAIEmbeddings"), \
          patch("src.data_ingestion.generic_rag_ingester.LightRAG"):
         ingester = GenericRAGIngester(content_template="Title: {title}\nBody: {content}")
         row = pd.Series({"title": "My Title", "content": "My Content"})
@@ -62,7 +61,7 @@ def test_format_content():
         assert formatted == "Title: My Title\nBody: My Content"
 
 def test_extract_metadata():
-    with patch("src.data_ingestion.generic_rag_ingester.get_embedding_model"), \
+    with patch("langchain_openai.OpenAIEmbeddings"), \
          patch("src.data_ingestion.generic_rag_ingester.LightRAG"):
         ingester = GenericRAGIngester(metadata_fields=["category", "author"])
         row = pd.Series({"category": "science", "author": "John Doe", "extra": "val"})

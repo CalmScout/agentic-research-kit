@@ -3,6 +3,7 @@
 Ported from nanobot for ARK.
 """
 
+import asyncio
 import html
 import json
 import os
@@ -168,11 +169,48 @@ class WebFetchTool(Tool):
             )
 
         try:
+            # Refined headers for better compatibility
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "Accept-Language": "en-US,en;q=0.9",
+                "Accept-Encoding": "gzip, deflate, br",
+                "Referer": "https://www.google.com/",
+                "DNT": "1",
+                "Connection": "keep-alive",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Ch-Ua": '"Chromium";v="122", "Not(A:Brand";v="24", "Google Chrome";v="122"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"Windows"',
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "cross-site",
+                "Sec-Fetch-User": "?1",
+            }
+            
             async with httpx.AsyncClient(
-                follow_redirects=True, max_redirects=MAX_REDIRECTS, timeout=30.0
+                follow_redirects=True, 
+                max_redirects=MAX_REDIRECTS, 
+                timeout=30.0,
+                # Use standard HTTP/1.1 as some sites block HTTP/2 from certain clients
+                http2=False 
             ) as client:
-                r = await client.get(url, headers={"User-Agent": USER_AGENT})
-                r.raise_for_status()
+                # Simple retry logic for 403/500 errors
+                for attempt in range(2):
+                    try:
+                        r = await client.get(url, headers=headers)
+                        if r.status_code == 403 and attempt == 0:
+                            # Try one more time with a mobile User-Agent
+                            headers["User-Agent"] = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1"
+                            headers["Sec-Ch-Ua-Mobile"] = "?1"
+                            await asyncio.sleep(2)
+                            continue
+                        r.raise_for_status()
+                        break
+                    except httpx.HTTPStatusError as e:
+                        if attempt == 1:
+                            raise
+                        await asyncio.sleep(2)
 
             ctype = r.headers.get("content-type", "")
 
@@ -181,14 +219,23 @@ class WebFetchTool(Tool):
                 text, extractor = json.dumps(r.json(), indent=2, ensure_ascii=False), "json"
             # HTML
             elif "text/html" in ctype or r.text[:256].lower().startswith(("<!doctype", "<html")):
-                doc = Document(r.text)
-                content = (
-                    self._to_markdown(doc.summary())
-                    if extract_mode == "markdown"
-                    else _strip_tags(doc.summary())
-                )
-                text = f"# {doc.title()}\n\n{content}" if doc.title() else content
-                extractor = "readability"
+                try:
+                    # Robust XML sanitization: Remove all non-printable/control characters
+                    # that are invalid in XML/HTML parsing (except \n, \r, \t)
+                    # This prevents 'ValueError: All strings must be XML compatible'
+                    sanitized_text = re.sub(r'[^\x09\x0A\x0D\x20-\x7E\x80-\xFF]', '', r.text)
+                    
+                    doc = Document(sanitized_text)
+                    content = (
+                        self._to_markdown(doc.summary())
+                        if extract_mode == "markdown"
+                        else _strip_tags(doc.summary())
+                    )
+                    text = f"# {doc.title()}\n\n{content}" if doc.title() else content
+                    extractor = "readability"
+                except Exception as readability_err:
+                    logger.warning(f"Readability extraction failed: {readability_err}. Falling back to raw text.")
+                    text, extractor = _strip_tags(r.text), "strip_tags_fallback"
             else:
                 text, extractor = r.text, "raw"
 

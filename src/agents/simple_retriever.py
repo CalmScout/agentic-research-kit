@@ -5,6 +5,7 @@ Provides basic retrieval from RAG-Anything without complex async issues.
 
 import json
 import logging
+import os
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -23,15 +24,23 @@ async def simple_retriever(query: str, top_k: int = 10) -> dict[str, Any]:
     logger.info(f"Simple retriever: '{query[:50]}...' (top_k={top_k})")
 
     try:
-        # Load documents from kv_store_full_docs.json
-        with open("./rag_storage/kv_store_full_docs.json") as f:
+        # Check if files exist before trying to load
+        full_docs_path = "./rag_storage/kv_store_full_docs.json"
+        if not os.path.exists(full_docs_path):
+            logger.warning(f"Storage file {full_docs_path} not found. Returning empty results.")
+            return {"retrieved_docs": [], "retrieval_scores": [], "retrieval_method": "keyword"}
+
+        with open(full_docs_path) as f:
             docs = json.load(f)
 
-        # Load embeddings from vdb_chunks.json
-        with open("./rag_storage/vdb_chunks.json") as f:
-            vdb_data = json.load(f)
-            vdb_data.get("matrix", [])
-            vdb_data.get("embedding_dim", 2048)
+        # Load embeddings from vdb_chunks.json if it exists
+        vdb_path = "./rag_storage/vdb_chunks.json"
+        if os.path.exists(vdb_path):
+            with open(vdb_path) as f:
+                vdb_data = json.load(f)
+                vdb_data.get("matrix", [])
+                from src.agents.embeddings import embedder
+                vdb_data.get("embedding_dim", embedder._dim)
 
         # Load entity chunks for knowledge graph traversal
         with open("./rag_storage/kv_store_entity_chunks.json") as f:

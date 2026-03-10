@@ -13,9 +13,9 @@ services:
       - "8000:8000"
     environment:
       # HuggingFace model configuration
-      - VISION_MODEL=${VISION_MODEL:-Qwen/Qwen3-VL-8B-Thinking}
-      - TEXT_LLM_MODEL=${TEXT_LLM_MODEL:-Qwen/Qwen3-8B}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-Qwen/Qwen3-Embedding-8B}
+      - VISION_MODEL=${VISION_MODEL:-Qwen/Qwen2.5-VL-3B-Instruct}
+      - TEXT_LLM_MODEL=${TEXT_LLM_MODEL:-Qwen/Qwen3.5-4B}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-large-en-v1.5}
       - BATCH_SIZE=${BATCH_SIZE:-4}
 
       # DeepSeek configuration (from .env)
@@ -44,3 +44,67 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # -----------------------------------------------------------------------------
+  # vLLM Service (Local LLM Inference)
+  # -----------------------------------------------------------------------------
+  vllm:
+    image: vllm/vllm-openai:v0.17.0
+    container_name: ark-vllm
+    shm_size: '10gb'
+    environment:
+      - VLLM_USE_V1=0
+    # Use --enforce-eager to skip CUDA graph compilation and potentially V1 issues
+    command: Qwen/Qwen3.5-4B --gpu-memory-utilization 0.7 --max-model-len 2048 --dtype auto --quantization fp8 --trust-remote-code --enforce-eager
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./model_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------
+  # TEI Service (Text Embeddings Inference)
+  # -----------------------------------------------------------------------------
+  tei:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    container_name: ark-tei
+    command: --model-id BAAI/bge-large-en-v1.5 --port 8080
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./model_cache:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  # -----------------------------------------------------------------------------
+  # TEI Reranker Service
+  # -----------------------------------------------------------------------------
+  tei-reranker:
+    image: ghcr.io/huggingface/text-embeddings-inference:latest
+    container_name: ark-tei-reranker
+    command: --model-id BAAI/bge-reranker-large --port 8080
+    ports:
+      - "8081:8080"
+    volumes:
+      - ./model_cache:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped

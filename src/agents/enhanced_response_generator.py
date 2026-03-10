@@ -14,7 +14,7 @@ import re
 from contextlib import AsyncExitStack
 from typing import Any, cast
 
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import SystemMessage, HumanMessage
 
 from src.agents.base_state import BaseAgentState
 from src.agents.model_selector import get_model_selector
@@ -197,7 +197,10 @@ async def enhanced_response_generator_agent(
                 )
 
                 # Invoke LLM
-                messages = [SystemMessage(content=prompt)]
+                messages = [
+                    SystemMessage(content="You are a research assistant specializing in evidence synthesis. Summarize the key findings from the provided documents."),
+                    HumanMessage(content=prompt)
+                ]
                 response = await llm.ainvoke(messages)
 
                 evidence_summary = cast(str, response.content).strip()

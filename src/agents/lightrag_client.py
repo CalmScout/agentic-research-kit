@@ -12,6 +12,7 @@ from typing import Any
 
 import httpx
 
+from src.agents.embeddings import embedder
 from src.utils.config import Settings
 
 logger = logging.getLogger(__name__)
@@ -104,8 +105,8 @@ class LightRAGHTTPClient:
             "LIGHTRAG_VECTOR_STORAGE": "LanceDBVectorDBStorage",
             "LIGHTRAG_GRAPH_STORAGE": "NetworkXStorage",
             "LIGHTRAG_DOC_STATUS_STORAGE": "LanceDBDocStatusStorage",
-            # Set embedding dimension to match Qwen3-VL-Embedding-2B (2048)
-            "EMBEDDING_DIM": "2048",
+            # Set embedding dimension to match the current model
+            "EMBEDDING_DIM": str(embedder._dim),
         }
 
         try:

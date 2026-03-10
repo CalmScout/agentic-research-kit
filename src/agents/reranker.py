@@ -64,7 +64,7 @@ class Qwen3VLReranker:
         documents: list[dict[str, Any]],
         top_k: int | None = None,
     ) -> list[dict[str, Any]]:
-        """Rerank documents based on query relevance.
+        """Rerank documents based on query relevance using TEI Reranker API.
 
         Args:
             query: User's query
@@ -80,15 +80,52 @@ class Qwen3VLReranker:
 
         top_k = top_k or self.top_k
 
-        # Ensure model is loaded
         try:
-            self._load_model()
-        except Exception as e:
-            logger.warning(f"Reranker failed, using original order: {e}")
-            return documents[:top_k]
+            import httpx
+            import os
+            
+            # Using local TEI Reranker endpoint (standard port 8081)
+            reranker_url = os.getenv("RERANKER_URL", "http://localhost:8081/rerank")
+            
+            # Fast check for reranker liveness
+            try:
+                # Prepare payload for TEI /rerank endpoint
+                # Format: {"query": "...", "texts": ["...", "..."]}
+                texts = [doc.get("text", "") for doc in documents]
+                
+                payload = {
+                    "query": query,
+                    "texts": texts,
+                    "truncate": True
+                }
+                
+                response = httpx.post(reranker_url, json=payload, timeout=10.0)
+                
+                if response.status_code == 200:
+                    results = response.json()
+                    # TEI returns: [{"index": 0, "score": 0.99}, ...]
+                    
+                    # Merge scores back into documents
+                    for res in results:
+                        idx = res["index"]
+                        score = res["score"]
+                        documents[idx]["rerank_score"] = score
+                    
+                    # Sort by new rerank_score
+                    reranked = sorted(documents, key=lambda x: x.get("rerank_score", 0.0), reverse=True)
+                    
+                    logger.info(f"✓ Reranked {len(documents)} docs via TEI API")
+                    return reranked[:top_k]
+                else:
+                    logger.warning(f"Reranker API returned {response.status_code}: {response.text}")
+                    raise RuntimeError("API failure")
+                    
+            except Exception as e:
+                logger.warning(f"Reranker API not available: {e}. Falling back to score-based ranking.")
+                # Fallback to score-based ranking below
+                pass
 
-        # Fallback: Sort by existing retrieval scores
-        try:
+            # Fallback: Sort by existing retrieval scores
             # Extract scores
             scored_docs = []
             for doc in documents:
@@ -101,11 +138,11 @@ class Qwen3VLReranker:
             # Return top-k documents
             reranked = [doc for score, doc in scored_docs[:top_k]]
 
-            logger.info(f"Reranked {len(documents)} docs → {len(reranked)} top docs")
+            logger.info(f"Reranked {len(documents)} docs → {len(reranked)} top docs (Score fallback)")
             return reranked
 
         except Exception as e:
-            logger.error(f"Reranking failed: {e}")
+            logger.error(f"Critical error in reranker: {e}")
             # Return original documents up to top_k
             return documents[:top_k]
 

@@ -138,11 +138,15 @@ class MemoryStore:
 
             vector = embedder.embed_text(finding)
             data = [{"vector": vector, "text": finding, "timestamp": timestamp}]
-            if self.table_name in self.db.list_tables():
+            
+            # Use a more robust check for table existence
+            table_list = self.db.list_tables()
+            if self.table_name in table_list:
                 tbl = self.db.open_table(self.table_name)
                 tbl.add(data)
             else:
-                self.db.create_table(self.table_name, data)
+                # Use mode='overwrite' as a safety even here if the table is somehow in a zombie state
+                self.db.create_table(self.table_name, data, mode="overwrite")
             logger.debug("Indexed new finding in LanceDB")
         except Exception as e:
             logger.error(f"Failed to index finding in LanceDB: {e}")

@@ -1,10 +1,7 @@
 from unittest.mock import MagicMock, patch
 
-import numpy as np
 import pytest
-
 from src.agents.embeddings import EmbeddingService
-
 
 @pytest.fixture
 def service():
@@ -12,33 +9,29 @@ def service():
 
 def test_embed_text(service):
     mock_model = MagicMock()
-    mock_model.embed_text.return_value = np.array([0.1, 0.2, 0.3])
+    mock_model.embed_query.return_value = [0.1, 0.2, 0.3]
 
-    with patch("src.agents.embeddings.get_embedding_model", return_value=mock_model):
+    with patch.object(service, "_get_model", return_value=mock_model):
         result = service.embed_text("hello")
         assert result == [0.1, 0.2, 0.3]
-        mock_model.embed_text.assert_called_with("hello")
+        mock_model.embed_query.assert_called_with("hello")
 
 def test_embed_image(service):
-    mock_model = MagicMock()
-    mock_model.embed_image.return_value = np.array([0.4, 0.5, 0.6])
-
-    with patch("src.agents.embeddings.get_embedding_model", return_value=mock_model):
-        result = service.embed_image("test.jpg")
-        assert result == [0.4, 0.5, 0.6]
-        mock_model.embed_image.assert_called_with("test.jpg")
+    # Now it returns a vector of zeros
+    result = service.embed_image("test.jpg")
+    assert result == [0.0] * 2048
 
 def test_embed_multimodal(service):
     with (
-        patch.object(service, "embed_text", return_value=[1.0, 1.0]),
-        patch.object(service, "embed_image", return_value=[0.0, 0.0])
+        patch.object(service, "embed_text", return_value=[1.0, 1.0])
     ):
         result = service.embed_multimodal("text", "image.jpg")
-        assert result == [0.5, 0.5]
+        assert result == [1.0, 1.0]
 
 def test_embed_batch(service):
-    with patch.object(service, "embed_text") as mock_embed:
-        mock_embed.side_effect = [[0.1], [0.2]]
+    mock_model = MagicMock()
+    mock_model.embed_documents.return_value = [[0.1], [0.2]]
+    with patch.object(service, "_get_model", return_value=mock_model):
         result = service.embed_batch(["a", "b"])
         assert result == [[0.1], [0.2]]
-        assert mock_embed.call_count == 2
+        mock_model.embed_documents.assert_called_once_with(["a", "b"])

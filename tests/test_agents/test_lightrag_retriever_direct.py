@@ -1,8 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
-
 import numpy as np
 import pytest
-
 from src.agents.direct_lightrag_retriever import (
     DirectLightRAGRetriever,
     _patched_get_storage_class,
@@ -14,42 +12,38 @@ from src.agents.lancedb_storage import (
     LanceDBVectorDBStorage,
 )
 
-
 @pytest.fixture
 def retriever():
     return DirectLightRAGRetriever(working_dir="./test_rag_storage", device="cpu")
 
 def test_patched_get_storage_class():
     mock_self = MagicMock()
-
     assert _patched_get_storage_class(mock_self, "LanceDBKVStorage") == LanceDBKVStorage
     assert _patched_get_storage_class(mock_self, "LanceDBDocStatusStorage") == LanceDBDocStatusStorage
     assert _patched_get_storage_class(mock_self, "LanceDBVectorDBStorage") == LanceDBVectorDBStorage
-
     with patch("src.agents.direct_lightrag_retriever._original_get_storage_class") as mock_orig:
         mock_orig.return_value = "original_class"
         assert _patched_get_storage_class(mock_self, "JsonKVStorage") == "original_class"
 
 @pytest.mark.asyncio
 async def test_embed_with_local_model(retriever):
-    mock_model = MagicMock()
-    mock_model.embed_text.return_value = np.zeros(2048)
-
+    mock_model = AsyncMock()
+    mock_model.aembed_documents.return_value = [[0.0] * 2048, [0.0] * 2048]
     with patch.object(retriever, "_get_embedding_model", return_value=mock_model):
         result = await retriever._embed_with_local_model(["text1", "text2"])
         assert result.shape == (2, 2048)
-        assert mock_model.embed_text.call_count == 2
+        assert mock_model.aembed_documents.call_count == 1
 
 @pytest.mark.asyncio
 async def test_llm_model_func(retriever):
-    mock_llm = MagicMock()
-    mock_llm.generate.return_value = "LightRAG response"
+    mock_llm = AsyncMock()
+    mock_llm.ainvoke.return_value = MagicMock(content="LightRAG response")
 
-    with patch("src.agents.direct_lightrag_retriever.get_qwen2_llm", return_value=mock_llm):
-        func = retriever._create_llm_model_func()
-        result = await func("prompt", system_prompt="system")
-        assert result == "LightRAG response"
-        mock_llm.generate.assert_called_once()
+    retriever._llm = mock_llm  # Avoid actual ChatOpenAI init
+    func = retriever._create_llm_model_func()
+    result = await func("prompt", system_prompt="system")
+    assert result == "LightRAG response"
+    mock_llm.ainvoke.assert_called_once()
 
 @pytest.mark.asyncio
 async def test_retrieve_success(retriever):

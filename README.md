@@ -91,56 +91,48 @@ make type-check    # Mypy type checking
 make test          # Pytest suite
 ```
 
-## 🚀 Getting Started
+## 🚀 Running Modes
 
-### Prerequisites
-- Python 3.11+
-- [uv](https://github.com/astral-sh/uv)
-- NVIDIA GPU (Recommended 12GB+ VRAM for full local mode)
+ARK supports several operating modes to cater to different research workflows. All commands are executed via the `ark` CLI.
 
-### Setup
-```bash
-# Clone and install dependencies
-git clone https://github.com/CalmScout/agentic-research-kit
-cd agentic-research-kit
-uv sync
+### 1. Research Query (`ark query`)
+The primary interface for deep research. It executes the full 3-agent LangGraph workflow.
 
-# Configure environment
-cp .env.defaults .env
-# Edit .env to add API keys (DEEPSEEK_API_KEY, BRAVE_API_KEY)
-```
+- **Standard Query**: `uv run ark query "Explain the scaling laws for transformers"`
+- **Hybrid Retrieval**: `uv run ark query "..." --mode hybrid` (Combines Vector + Knowledge Graph)
+- **Multimodal**: `uv run ark query "Analyze this graph" --image ./chart.png`
+- **Retrieval Modes**:
+    - `naive`: Standard vector search.
+    - `local`: Search within local context and entities.
+    - `global`: Broad knowledge graph traversal.
+    - `hybrid` (Default): Optimal combination of local and global retrieval.
 
-### Operation
+### 2. Batch Ingestion (`ark ingest-dir`)
+Populate the research memory and knowledge graph from local files.
 
-**1. Ingestion**
-Ingest documents into the local knowledge graph:
-```bash
-uv run ark ingest-dir ./data/research_papers --pattern "*.pdf"
-```
+- **Recursive Ingest**: `uv run ark ingest-dir ./papers --recursive`
+- **Pattern Matching**: `uv run ark ingest-dir ./docs --pattern "*.docx"`
+- **Test Run**: `uv run ark ingest-dir ./data --max-items 5` (Process a subset for verification)
 
-**2. Research Query**
-Run a multimodal or text-only query via CLI:
-```bash
-uv run ark query "How does Multi-Head Attention scale?" --mode hybrid
-```
+### 3. Evaluation Pipeline (`ark evaluate`)
+Quantitatively measure system performance using retrieval metrics and LLM-as-a-judge.
 
-**3. REST API**
-Start the FastAPI server:
-```bash
-uv run ark serve
-```
+- **Simple Metrics**: `uv run ark evaluate -n 20` (Precision@K, Recall@K, MRR)
+- **RAGAS Evaluation**: `uv run ark evaluate --metrics ragas --llm openai` (Faithfulness, Relevancy)
+- **Full Suite**: `uv run ark evaluate --metrics all`
 
-**4. Gateway (Telegram)**
-Start the asynchronous communication gateway:
-```bash
-uv run ark gateway
-```
+### 4. API Server (`ark serve`)
+Deploy ARK as a RESTful service for integration with external applications.
 
-**5. Observability**
-Launch the Phoenix trace explorer:
-```bash
-PHOENIX_ENABLED=true uv run python -m phoenix.server.main serve
-```
+- **Start Server**: `uv run ark serve --port 8000`
+- **API Docs**: Available at `http://localhost:8000/docs` (Swagger UI)
+
+### 5. Research Gateway (`ark gateway`)
+Enable asynchronous, multi-channel communication (e.g., Telegram).
+
+- **Start Gateway**: `uv run ark gateway` (Requires `TELEGRAM_ENABLED=true` in `.env`)
+
+---
 
 ## 📅 Roadmap
 
@@ -151,8 +143,8 @@ ARK is transitioning from a synchronous RAG pipeline to an event-driven agent ar
 *   ✅ **Phase 3: Research Scope Expansion**: Integrated Web Search and Proactive Research.
 *   ✅ **Phase 3.5: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
 *   ✅ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
-*   🔄 **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB (In Progress).
-*   ⬜ **Phase 6: Interface & Asynchronicity**: Message Bus integration and interactive clarification.
+*   ✅ **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB and memory hardening.
+*   🔄 **Phase 6: Interface & Asynchronicity**: Multi-Channel Gateway (Telegram) and Message Bus integration (In Progress).
 *   ⬜ **Phase 7: Temporal Autonomy**: Cron services and self-waking research tasks.
 
 ## 📚 Documentation

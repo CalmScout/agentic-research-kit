@@ -30,6 +30,29 @@ def setup_observability() -> None:
         logger.debug("Phoenix observability disabled (PHOENIX_ENABLED=false)")
         return
 
+    # --- Added Reachability Check ---
+    import socket
+    from urllib.parse import urlparse
+
+    try:
+        url = urlparse(settings.phoenix_collector_endpoint)
+        host = url.hostname or "localhost"
+        port = url.port or 6006
+
+        # Quick check to see if the collector is reachable
+        with socket.create_connection((host, port), timeout=1.0):
+            pass
+    except (socket.timeout, ConnectionRefusedError, socket.gaierror):
+        logger.warning(
+            f"Phoenix collector not reachable at {host}:{port}. Skipping observability initialization."
+        )
+        logger.warning("  To enable tracing, start Phoenix with: ./scripts/start_phoenix.sh")
+        return
+    except Exception as e:
+        logger.debug(f"Unexpected error checking Phoenix reachability: {e}")
+        # Continue anyway and let the normal init handle it
+    # --------------------------------
+
     try:
         from openinference.instrumentation.langchain import LangChainInstrumentor
         from opentelemetry import trace

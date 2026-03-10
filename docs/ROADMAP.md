@@ -74,18 +74,23 @@ ARK is designed as a high-performance, specialized RAG system for deep research.
     - Transitioned `workflow.py` from a linear pipeline (Retrieve -> Generate -> Verify) to a dynamic loop (Reason -> Act -> Observe -> Repeat).
     - Enabled the `VerificationNode` to trigger "Refinement Cycles" if evidence is insufficient or hallucinations are detected.
     - Implemented "Research Gap" detection in `EnhancedRetriever` to guide subsequent retrieval steps.
-- [ ] **Subagent Delegation**:
-    - Port `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents to handle specialized sub-tasks. (Pending integration)
+- [x] **Subagent Delegation**:
+    - Ported `SubagentManager` and `SpawnTool` from nanobot for ephemeral "Deep Dive" agents to handle specialized sub-tasks.
+    - Integrated subagent logic into the `ResearchTaskManager`.
 
-### Phase 5: High-Fidelity Research Memory (In Progress)
+### Phase 5: High-Fidelity Research Memory (Complete)
 - [x] **Semantic Research Store (LanceDB)**:
-    - [x] Fully migrated `RESEARCH_MEMORY.md` findings to a vector-enabled LanceDB table in `src/agents/memory/store.py`.
-    - [x] Implemented "Long-term RAG" to allow retrieval from past research findings across different sessions.
-- [ ] **Memory Hardening**:
-    - [ ] Add semantic deduplication to prevent redundant findings from clogging the memory.
-    - [ ] Implement automated session consolidation triggered by `ResearchTaskManager`.
+    - Fully migrated `RESEARCH_MEMORY.md` findings to a vector-enabled LanceDB table in `src/agents/memory/store.py`.
+    - Implemented "Long-term RAG" to allow retrieval from past research findings across different sessions.
+- [x] **Memory Hardening**:
+    - Added semantic deduplication to prevent redundant findings from clogging the memory.
+    - Implemented automated session consolidation triggered by `ResearchTaskManager`.
+- [x] **High-Performance Vector Store Migration**:
+    - Completed transition of all retrieval components to use LanceDB, significantly improving query latency and scalability.
 
-### Phase 6: Interface & Asynchronicity (Planned)
+### Phase 6: Interface & Asynchronicity (In Progress)
+- [x] **Multi-Channel Gateway**:
+    - Complete implementation of Telegram channel with full rich-text and file support.
 - [ ] **Message Bus Integration**:
     - Refactor `ChannelManager` to use an async `MessageBus` (Inbound/Outbound queues) to decouple communication channels from the Agent processor.
 - [ ] **Async Event Bus**:

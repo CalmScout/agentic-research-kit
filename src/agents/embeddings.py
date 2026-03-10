@@ -1,19 +1,21 @@
 """Embedding service for generating multimodal vector representations.
 
-Uses GPU-accelerated Qwen3-VL-Embedding-2B for unified text/image vector space.
+Uses GPU-accelerated BAAI/bge-large-en-v1.5 for text vector space via TEI.
 """
 
 import logging
 from typing import cast
+import os
+
+from langchain_openai import OpenAIEmbeddings
 
 from src.utils.config import get_settings
-from src.utils.vision_embedding import get_embedding_model
 
 logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
-    """Multimodal embedding service using local Qwen3-VL-Embedding-2B."""
+    """Multimodal embedding service using local TEI."""
 
     def __init__(self, device: str = "cuda"):
         """Initialize embedding service.
@@ -24,24 +26,47 @@ class EmbeddingService:
         self.settings = get_settings()
         self.device = device
         self._model = None
+        self._dim = 1024  # Default for BAAI/bge-large-en-v1.5
 
-    def _get_model(self):
-        """Lazy load embedding model singleton."""
+    def _get_model(self) -> OpenAIEmbeddings:
+        """Lazy load embedding model singleton pointing to TEI."""
         if self._model is None:
-            self._model = get_embedding_model(
-                model_name=self.settings.embedding_model, device=self.device
+            model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+            base_url = os.getenv("EMBEDDING_API_URL", "http://localhost:8082/v1")
+            
+            self._model = OpenAIEmbeddings(
+                model=model_name,
+                base_url=base_url,
+                api_key="EMPTY",
+                timeout=120.0,
             )
+            
+            # Detect actual dimension by asking the API
+            try:
+                import httpx
+                # TEI info endpoint is at the base URL (without /v1)
+                info_url = base_url.replace("/v1", "") + "/info"
+                response = httpx.get(info_url, timeout=2.0)
+                if response.status_code == 200:
+                    data = response.json()
+                    # TEI returns model info including dimension
+                    self._dim = data.get("max_sequence_length", 1024) # Placeholder if not found
+                    # Better: actually use a test query if /info doesn't have it
+                    test_vec = self._model.embed_query("test")
+                    self._dim = len(test_vec)
+                    logger.info(f"✓ Detected embedding dimension from {model_name}: {self._dim}")
+                else:
+                    test_vec = self._model.embed_query("test")
+                    self._dim = len(test_vec)
+                    logger.info(f"✓ Detected embedding dimension via test query: {self._dim}")
+            except Exception as e:
+                logger.warning(f"Could not detect embedding dimension: {e}. Defaulting to 1024.")
+                self._dim = 1024
+                
         return self._model
 
     def embed_text(self, text: str) -> list[float]:
-        """Generate vector embedding for a text string.
-
-        Args:
-            text: Input text
-
-        Returns:
-            List[float]: 2048D embedding vector
-        """
+        """Generate vector embedding for a text string."""
         try:
             from opentelemetry import trace
             from opentelemetry.trace import StatusCode
@@ -54,26 +79,38 @@ class EmbeddingService:
                     "input.value": text[:1000] + "..." if len(text) > 1000 else text,
                     "input.mime_type": "text/plain",
                     "openinference.span.kind": "EMBEDDING",
-                    "embedding.model_name": self.settings.embedding_model,
+                    "embedding.model_name": os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5"),
                 },
             ) as span:
                 model = self._get_model()
-                embedding = model.embed_text(text)
-                result = cast(list[float], embedding.tolist())
-
-                # We don't log the full vector to avoid overhead, just dimensionality
+                # embed_query is synchronous
+                try:
+                    result = model.embed_query(text)
+                except AttributeError as e:
+                    if "'str' object has no attribute 'data'" in str(e):
+                        raise ConnectionError(
+                            "Failed to connect to TEI Embedding API at http://localhost:8082/v1. "
+                            "Ensure the 'tei' docker container is running."
+                        ) from e
+                    raise
+                except Exception as e:
+                    if "Connection" in str(e) or "ConnectError" in str(type(e)):
+                         raise ConnectionError(
+                            "Failed to connect to TEI Embedding API at http://localhost:8082/v1. "
+                            "Ensure the 'tei' docker container is running."
+                        ) from e
+                    raise
+                    
                 span.set_attribute("output.value", f"vector(dim={len(result)})")
                 span.set_status(StatusCode.OK)
                 return result
         except ImportError:
             model = self._get_model()
-            embedding = model.embed_text(text)
-            return cast(list[float], embedding.tolist())
+            return model.embed_query(text)
         except Exception as e:
             logger.error(f"Failed to generate text embedding: {e}")
             try:
                 from opentelemetry.trace import StatusCode
-
                 span = trace.get_current_span()
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)
@@ -83,83 +120,24 @@ class EmbeddingService:
 
     def embed_image(self, image_path: str) -> list[float]:
         """Generate vector embedding for an image.
-
-        Args:
-            image_path: Path to image file
-
-        Returns:
-            List[float]: 2048D embedding vector
+        
+        Currently a fallback placeholder as standard TEI text endpoint doesn't natively support images.
         """
-        try:
-            from opentelemetry import trace
-            from opentelemetry.trace import StatusCode
-
-            tracer = trace.get_tracer(__name__)
-            with tracer.start_as_current_span(
-                "embed_image",
-                attributes={
-                    "input.value": image_path,
-                    "openinference.span.kind": "EMBEDDING",
-                    "embedding.model_name": self.settings.embedding_model,
-                },
-            ) as span:
-                model = self._get_model()
-                embedding = model.embed_image(image_path)
-                result = cast(list[float], embedding.tolist())
-
-                span.set_attribute("output.value", f"vector(dim={len(result)})")
-                span.set_status(StatusCode.OK)
-                return result
-        except ImportError:
-            model = self._get_model()
-            embedding = model.embed_image(image_path)
-            return cast(list[float], embedding.tolist())
-        except Exception as e:
-            logger.error(f"Failed to generate image embedding: {e}")
-            try:
-                from opentelemetry.trace import StatusCode
-
-                span = trace.get_current_span()
-                span.set_status(StatusCode.ERROR, str(e))
-                span.record_exception(e)
-            except Exception:
-                pass
-            raise
+        # Ensure model is initialized to have _dim
+        self._get_model()
+        logger.warning("Image embedding via TEI text model not natively supported. Returning zero vector.")
+        return [0.0] * self._dim
 
     def embed_multimodal(self, text: str, image_path: str | None = None) -> list[float]:
-        """Generate joint text+image embedding.
-
-        Args:
-            text: Text component
-            image_path: Optional image path
-
-        Returns:
-            List[float]: Joint embedding vector
-        """
+        """Generate joint text+image embedding."""
         if not image_path:
             return self.embed_text(text)
-
-        # Qwen3-VL-Embedding-2B supports joint inputs
-        # For now we use image embedding as primary for multimodal queries
-        # (Alternatively, average text + image vectors)
-        image_vector = self.embed_image(image_path)
-        text_vector = self.embed_text(text)
-
-        # Average fusion for simple multimodal representation
-        import numpy as np
-
-        avg_vector = (np.array(image_vector) + np.array(text_vector)) / 2.0
-        return cast(list[float], avg_vector.tolist())
+        
+        # In a real multimodal TEI setup, we would send both. For now fallback to text.
+        return self.embed_text(text)
 
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a batch of texts.
-
-        Args:
-            texts: List of text strings
-
-        Returns:
-            List[List[float]]: List of embedding vectors
-        """
+        """Generate embeddings for a batch of texts."""
         try:
             from opentelemetry import trace
             from opentelemetry.trace import StatusCode
@@ -170,36 +148,36 @@ class EmbeddingService:
                 attributes={
                     "input.value": f"batch_size={len(texts)}",
                     "openinference.span.kind": "EMBEDDING",
-                    "embedding.model_name": self.settings.embedding_model,
+                    "embedding.model_name": os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5"),
                 },
             ) as span:
                 model = self._get_model()
-                # Handle model batching if supported
-                if hasattr(model, "embed_text_batch"):
-                    embeddings = model.embed_text_batch(texts)
-                    result = cast(list[list[float]], embeddings.tolist())
-                    span.set_attribute("output.value", f"batch_vectors(count={len(result)})")
-                    span.set_status(StatusCode.OK)
-                    return result
-                else:
-                    embeddings = [self.embed_text(text) for text in texts]
-                    result = cast(list[list[float]], embeddings)
-                    span.set_attribute("output.value", f"batch_vectors(count={len(result)})")
-                    span.set_status(StatusCode.OK)
-                    return result
+                try:
+                    result = model.embed_documents(texts)
+                except AttributeError as e:
+                    if "'str' object has no attribute 'data'" in str(e):
+                        raise ConnectionError(
+                            "Failed to connect to TEI Embedding API at http://localhost:8082/v1. "
+                            "Ensure the 'tei' docker container is running."
+                        ) from e
+                    raise
+                except Exception as e:
+                    if "Connection" in str(e) or "ConnectError" in str(type(e)):
+                         raise ConnectionError(
+                            "Failed to connect to TEI Embedding API at http://localhost:8082/v1. "
+                            "Ensure the 'tei' docker container is running."
+                        ) from e
+                    raise
+                span.set_attribute("output.value", f"batch_vectors(count={len(result)})")
+                span.set_status(StatusCode.OK)
+                return result
         except ImportError:
             model = self._get_model()
-            if hasattr(model, "embed_text_batch"):
-                embeddings = model.embed_text_batch(texts)
-                return cast(list[list[float]], embeddings.tolist())
-            else:
-                embeddings = [self.embed_text(text) for text in texts]
-                return cast(list[list[float]], embeddings)
+            return model.embed_documents(texts)
         except Exception as e:
             logger.error(f"Failed to embed batch: {e}")
             try:
                 from opentelemetry.trace import StatusCode
-
                 span = trace.get_current_span()
                 span.set_status(StatusCode.ERROR, str(e))
                 span.record_exception(e)

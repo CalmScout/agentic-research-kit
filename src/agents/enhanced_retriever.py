@@ -123,7 +123,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             except Exception as e:
                 logger.error(f"Failed to generate embedding: {e}")
                 # Create zero embedding as fallback
-                query_embedding = [0.0] * 2048
+                query_embedding = [0.0] * embedder._dim
 
             # -------------------------------------------------------------
             # Step 4: Retrieve documents from Local RAG
@@ -206,13 +206,18 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             # -------------------------------------------------------------
             # Step 6: Proactive Background Research
             # -------------------------------------------------------------
-            # CRITICAL: Only trigger deep-dives if NOT in local mode to avoid overloading CPU/RAM
-            if entities and settings.llm_mode != "local":
+            # CRITICAL: Only trigger deep-dives if NOT in local/naive mode 
+            # and NOT globally in local mode to avoid overloading CPU/RAM.
+            is_local_retrieval = retrieval_mode in ["local", "naive"]
+            is_local_llm = settings.llm_mode == "local"
+            
+            if entities and not is_local_retrieval and not is_local_llm:
                 for entity in entities[:2]:  # Max 2 deep dives
                     logger.info(f"Triggering proactive deep-dive for: {entity}")
                     await registry.execute("entity_deep_dive", {"entity": entity})
-            elif entities and settings.llm_mode == "local":
-                logger.debug("Skipping proactive deep-dives in local mode to conserve resources")
+            else:
+                reason = "local retrieval" if is_local_retrieval else "local LLM mode"
+                logger.debug(f"Skipping proactive deep-dives due to {reason}")
 
             # -------------------------------------------------------------
             # Return updated state
@@ -238,7 +243,7 @@ async def enhanced_retriever_agent(state: BaseAgentState) -> dict[str, Any]:
             return {
                 "query_type": "text",
                 "entities": [],
-                "query_embedding": [0.0] * 2048,
+                "query_embedding": [0.0] * embedder._dim,
                 "retrieved_docs": [],
                 "retrieval_scores": [],
                 "retrieval_method": "keyword",  # Fallback mode

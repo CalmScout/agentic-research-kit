@@ -80,6 +80,9 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
     try:
         model_selector = get_model_selector()
         llm = model_selector.get_llm_with_fallback()
+        # Add timeout to verification
+        if hasattr(llm, "timeout"):
+            llm.timeout = 120.0
 
         sources_text = format_sources_for_prompt(sources)
         prompt = VERIFICATION_PROMPT.format(
@@ -88,7 +91,12 @@ async def verification_agent(state: BaseAgentState) -> dict[str, Any]:
 
         llm_messages = [
             SystemMessage(
-                content="You are a strict verification and fact-checking AI. Output only JSON."
+                content="""You are a pragmatic fact-checking AI. Output ONLY JSON. 
+Rules:
+1. Material Integrity: Only flag hallucinations if they are factually wrong or misleading (e.g. wrong dates, wrong companies, fabricated numbers). 
+2. Pragmatism: If a source describes a chip in a company blog, attributing it to that company is acceptable. 
+3. Research Gaps: If information is missing from sources, flag it as a 'gap', not a 'hallucination'. 
+4. Efficiency: Avoid looping for minor stylistic differences."""
             ),
             HumanMessage(content=prompt),
         ]

@@ -1,7 +1,7 @@
-"""Direct LightRAG retriever using local embedding models.
+"""Direct LightRAG retriever using API embedding models.
 
 This module provides direct access to LightRAG without using the HTTP server.
-It uses local Qwen3-VL embedding models for query embedding and retrieval.
+It uses API endpoints (TEI and vLLM) for embedding and LLM operations.
 """
 
 import logging
@@ -20,7 +20,9 @@ from src.agents.lancedb_storage import (
     LanceDBKVStorage,
     LanceDBVectorDBStorage,
 )
-from src.utils.vision_embedding import Qwen3VLEmbedding, get_qwen2_llm
+from src.agents.model_selector import ThinkingProcessStripper
+from langchain_openai import OpenAIEmbeddings
+from langchain_core.messages import SystemMessage, HumanMessage
 
 # Register custom LanceDB storages names
 STORAGES["LanceDBKVStorage"] = "LanceDBKVStorage"
@@ -61,11 +63,66 @@ LightRAG._get_storage_class = _patched_get_storage_class
 
 logger = logging.getLogger(__name__)
 
+# --- Standalone Wrapper Functions for LightRAG (Avoids deepcopy/pickle issues) ---
+
+# Global singletons for the wrappers to avoid recreation overhead
+_wrapper_llm = None
+_wrapper_embeddings = None
+
+async def direct_hf_llm_wrapper(prompt: str, system_prompt: str | None = None, **kwargs) -> str:
+    """Standalone LLM wrapper for LightRAG using singleton client and json_repair."""
+    global _wrapper_llm
+    if _wrapper_llm is None:
+        model_name = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen3.5-4B")
+        _wrapper_llm = ThinkingProcessStripper(
+            model=model_name,
+            base_url="http://localhost:8001/v1",
+            api_key="EMPTY",
+            temperature=0.0,
+            timeout=120.0,
+            max_tokens=1024 
+        )
+    
+    messages = []
+    if system_prompt:
+        messages.append(SystemMessage(content=system_prompt))
+    messages.append(HumanMessage(content=prompt))
+    
+    res = await _wrapper_llm.ainvoke(messages)
+    content = str(res.content)
+    
+    # If the prompt looks like it's asking for JSON (common in LightRAG), 
+    # use json_repair to ensure it's clean for their internal parser.
+    if any(keyword in prompt.lower() for keyword in ["json", "format:", "{"]):
+        try:
+            import json_repair
+            return json_repair.repair_json(content)
+        except ImportError:
+            pass
+            
+    return content
+
+async def direct_hf_embedding_wrapper(texts: list[str], **kwargs) -> np.ndarray:
+    """Standalone embedding wrapper for LightRAG using singleton client."""
+    global _wrapper_embeddings
+    if _wrapper_embeddings is None:
+        model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+        _wrapper_embeddings = OpenAIEmbeddings(
+            model=model_name,
+            base_url="http://localhost:8082/v1",
+            api_key="EMPTY",
+            timeout=120.0,
+        )
+    
+    res = await _wrapper_embeddings.aembed_documents(texts)
+    return np.array(res, dtype=np.float32)
+
+# --- End Wrapper Functions ---
 
 class DirectLightRAGRetriever:
-    """Direct LightRAG retriever using local embedding models.
+    """Direct LightRAG retriever using API embedding models.
 
-    This avoids the HTTP server and works entirely with local models.
+    This avoids the HTTP server and works entirely with local API models.
     """
 
     def __init__(self, working_dir: str = "./rag_storage", device: str = "cuda"):
@@ -78,124 +135,58 @@ class DirectLightRAGRetriever:
         self.working_dir = Path(working_dir)
         self.device = device
         self._rag: LightRAG | None = None
-        self._embedding_model: Qwen3VLEmbedding | None = None
-
-    def _get_embedding_model(self) -> Qwen3VLEmbedding:
-        """Get or create embedding model instance (lazy loading)."""
-        if self._embedding_model is None:
-            logger.info("Loading local embedding model: Qwen/Qwen3-VL-Embedding-2B")
-            self._embedding_model = Qwen3VLEmbedding(
-                model_name="Qwen/Qwen3-VL-Embedding-2B",
-                device=self.device,
-                torch_dtype="float16",  # Use float16 instead of "auto"
-            )
-            # Test embedding to get dimension
-            test_emb = self._embedding_model.embed_text("test")
-            logger.info(f"✓ Embedding model loaded (dimension: {test_emb.shape[0]})")
-
-        return self._embedding_model
-
-    async def _embed_with_local_model(self, texts: list) -> np.ndarray:
-        """Generate embeddings using local Qwen3-VL model.
-
-        Args:
-            texts: List of text strings to embed
-
-        Returns:
-            2D Numpy array with shape (num_texts, embedding_dim)
-        """
-        embedding_model = self._get_embedding_model()
-
-        # Optimization: LightRAG's internal workers can cause multiple accesses
-        # We ensure thread-safe single-threaded execution here
-        embeddings = []
-
-        for text in texts:
-            try:
-                # Direct call to singleton which is already instrumented for Phoenix
-                embedding = embedding_model.embed_text(text)
-                embeddings.append(embedding)
-            except Exception as e:
-                logger.error(f"Embedding error for text '{text[:50]}...': {e}")
-                # Return zero vector on error
-                embeddings.append(np.zeros(2048, dtype=np.float32))
-
-        # Convert list of 1D arrays to 2D numpy array
-        return np.vstack(embeddings).astype(np.float32)
-
-    def _create_llm_model_func(self) -> Callable:
-        """Create async LLM function compatible with LightRAG.
-
-        Returns an async function that LightRAG can call for entity extraction
-        and knowledge graph operations during queries.
-        """
-
-        async def llm_model_func(
-            prompt: str,
-            system_prompt: str | None = None,
-            history_messages: list[Any] | None = None,
-            **kwargs: Any,
-        ) -> str:
-            """LLM function for LightRAG entity extraction."""
-            try:
-                # Lazy load LLM on first call (uses singleton from vision_embedding.py)
-                if not hasattr(self, "_llm"):
-                    logger.info("Initializing Qwen2.5-1.5B for LightRAG LLM operations...")
-                    self._llm = get_qwen2_llm(
-                        model_name="Qwen/Qwen2.5-1.5B-Instruct", device=self.device
-                    )
-                    logger.info("✓ LightRAG LLM initialized")
-
-                # Generate response using sync call in async context
-                response = self._llm.generate(
-                    prompt=prompt, system_prompt=system_prompt, temperature=0.0, max_tokens=512
-                )
-                return response
-
-            except Exception as e:
-                logger.error(f"LLM function error: {e}", exc_info=True)
-                return ""
-
-        return llm_model_func
+        self._embedding_dim: int = 1024  # Default for BGE large
 
     def get_rag(self) -> LightRAG:
-        """Get or create LightRAG instance.
-
-        Returns:
-            LightRAG instance configured with local embedding model
-        """
+        """Get or create LightRAG instance."""
         if self._rag is None:
             logger.info(
-                f"Initializing LightRAG with local models (working_dir: {self.working_dir})"
+                f"Initializing LightRAG with API models (working_dir: {self.working_dir})"
             )
 
-            # CRITICAL: Force LightRAG to use a single background worker for embeddings
-            # This prevents memory explosion when multiple entities are embedded
-            os.environ["EMBEDDING_FUNC_MAX_ASYNC"] = "1"
+            # Detect dimension if not already set (one-time check)
+            if self._embedding_dim == 1024:
+                try:
+                    import httpx
+                    model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-large-en-v1.5")
+                    base_url = os.getenv("EMBEDDING_API_URL", "http://localhost:8082/v1")
+                    logger.debug(f"Detecting embedding dimension for {model_name}...")
+                    
+                    # Try info endpoint or test query
+                    test_embeddings = OpenAIEmbeddings(
+                        model=model_name,
+                        base_url=base_url,
+                        api_key="EMPTY",
+                        timeout=10.0
+                    )
+                    test_vec = test_embeddings.embed_query("test")
+                    self._embedding_dim = len(test_vec)
+                    logger.info(f"✓ Detected LightRAG embedding dimension: {self._embedding_dim}")
+                except Exception as e:
+                    logger.warning(f"Could not detect embedding dimension for LightRAG: {e}. Defaulting to 1024.")
+                    self._embedding_dim = 1024
 
-            # Create embedding function.
+            # Create embedding function using standalone wrapper.
             embedding_func = EmbeddingFunc(
-                embedding_dim=2048,  # Qwen3-VL-Embedding-2B dimension
+                embedding_dim=self._embedding_dim,
                 max_token_size=8192,
-                func=self._embed_with_local_model,
+                func=direct_hf_embedding_wrapper,
             )
 
-            # Create LLM function for entity extraction
-            llm_model_func = self._create_llm_model_func()
-
-            # Initialize LightRAG
+            # Initialize LightRAG with standalone wrappers
             self._rag = LightRAG(
                 working_dir=str(self.working_dir),
-                llm_model_func=llm_model_func,
+                llm_model_func=direct_hf_llm_wrapper,
                 embedding_func=embedding_func,
                 kv_storage="LanceDBKVStorage",
                 doc_status_storage="LanceDBDocStatusStorage",
                 vector_storage="LanceDBVectorDBStorage",
-                embedding_batch_num=1,  # Force sequential embedding to save RAM
-                embedding_func_max_async=1,  # CRITICAL: Fix for the "8 workers" issue
+                embedding_batch_num=1,
+                embedding_func_max_async=1,
+                llm_model_max_async=1,  # CRITICAL: Force exactly 1 LLM task at a time
             )
 
-            logger.info("✓ LightRAG initialized successfully (EMBEDDING_FUNC_MAX_ASYNC=1)")
+            logger.info("✓ LightRAG initialized successfully")
 
         return self._rag
 

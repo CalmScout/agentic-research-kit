@@ -98,7 +98,7 @@ async def direct_hf_llm_wrapper(prompt: str, system_prompt: str | None = None, *
         try:
             import json_repair
 
-            return json_repair.repair_json(content)
+            return cast(str, json_repair.repair_json(content))
         except ImportError:
             pass
 

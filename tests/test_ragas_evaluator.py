@@ -3,22 +3,36 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
 import pytest
+from ragas.embeddings.base import BaseRagasEmbedding
+from ragas.llms import InstructorBaseRagasLLM
 
 from src.evaluation.ragas_evaluator import RAGASEvaluator, create_evaluator_from_settings
 
-# Mock the entire langchain_huggingface module before it's imported
-mock_hf = MagicMock()
-sys.modules["langchain_huggingface"] = mock_hf
+# Mock HuggingFaceEmbeddings to be recognized as a valid Ragas embedding
+class MockRagasEmbedding(BaseRagasEmbedding):
+    def embed_query(self, text: str) -> list[float]: return [0.0]
+    def embed_documents(self, texts: list[str]) -> list[list[float]]: return [[0.0]]
+    def embed_text(self, text: str) -> list[float]: return [0.0]
+    async def aembed_query(self, text: str) -> list[float]: return [0.0]
+    async def aembed_documents(self, texts: list[str]) -> list[list[float]]: return [[0.0]]
+    async def aembed_text(self, text: str) -> list[float]: return [0.0]
+
+mock_hf_module = MagicMock()
+mock_hf_module.HuggingFaceEmbeddings = MagicMock(return_value=MockRagasEmbedding())
+sys.modules["ragas.embeddings"] = mock_hf_module
 
 @pytest.fixture
 def mock_llm():
-    return MagicMock()
+    class MockInstructorLLM(InstructorBaseRagasLLM):
+        def generate(self, *args, **kwargs): return MagicMock()
+        async def agenerate(self, *args, **kwargs): return MagicMock()
+    
+    return MockInstructorLLM()
 
 @pytest.fixture
 def evaluator(mock_llm):
     # Mock RAGAS components during init
-    with patch("ragas.cache.DiskCacheBackend"), \
-         patch("ragas.llms.LangchainLLMWrapper"):
+    with patch("ragas.cache.DiskCacheBackend"):
         return RAGASEvaluator(evaluator_llm=mock_llm, enable_cache=False)
 
 @pytest.mark.asyncio

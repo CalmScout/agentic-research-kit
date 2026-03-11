@@ -94,7 +94,7 @@ def _split_message(content: str, max_len: int = 4000) -> list[str]:
 class TelegramChannel(Channel):
     """Telegram channel implementation using long polling."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.settings = get_settings()
         self._app: Application | None = None
         self._on_message_callback: Callable[[InboundMessage], Awaitable[None]] | None = None
@@ -104,7 +104,7 @@ class TelegramChannel(Channel):
     def name(self) -> str:
         return "telegram"
 
-    async def start(self, on_message: Callable[[InboundMessage], Awaitable[None]]):
+    async def start(self, on_message: Callable[[InboundMessage], Awaitable[None]]) -> None:
         if not TELEGRAM_AVAILABLE:
             logger.error("python-telegram-bot not installed")
             return

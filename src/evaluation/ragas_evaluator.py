@@ -23,6 +23,7 @@ Example:
 """
 
 import asyncio
+import functools
 import logging
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -43,19 +44,22 @@ class RAGASEvaluator:
 
     Features:
         - Async-first (matches LangGraph workflow pattern)
-        - LLM-agnostic (supports DeepSeek, OpenAI, or local models)
+        - Modern Ragas API alignment (llm_factory)
         - Phoenix trace linking for observability
         - Caching for cost optimization (75% reduction)
         - Retry logic for robustness
 
     Attributes:
-        llm: LangChain-wrapped LLM for RAGAS evaluation
+        llm: InstructorBaseRagasLLM for RAGAS evaluation
         batch_size: Number of queries to process in parallel
         timeout: Timeout (seconds) per evaluation batch
         cache: RAGAS cache for cost optimization
 
     Example:
-        >>> evaluator_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0.0)
+        >>> from openai import OpenAI
+        >>> client = OpenAI(api_key="...")
+        >>> from ragas.llms import llm_factory
+        >>> evaluator_llm = llm_factory("gpt-4o-mini", client=client)
         >>> evaluator = RAGASEvaluator(
         ...     evaluator_llm=evaluator_llm,
         ...     batch_size=10,
@@ -65,7 +69,7 @@ class RAGASEvaluator:
 
     def __init__(
         self,
-        evaluator_llm: BaseLanguageModel,
+        evaluator_llm: BaseLanguageModel | Any,
         batch_size: int = 10,
         timeout: int = 120,
         enable_cache: bool = True,
@@ -73,7 +77,7 @@ class RAGASEvaluator:
         """Initialize RAGAS evaluator.
 
         Args:
-            evaluator_llm: LangChain LLM for RAGAS evaluation (requires temperature=0.0)
+            evaluator_llm: Modern Ragas LLM or legacy LangChain LLM
             batch_size: Batch size for parallel evaluation
             timeout: Timeout (seconds) per evaluation batch
             enable_cache: Enable disk-based caching for 75% cost reduction
@@ -83,9 +87,20 @@ class RAGASEvaluator:
         """
         # Import RAGAS components
         from ragas.cache import DiskCacheBackend
-        from ragas.llms import LangchainLLMWrapper
+        from ragas.llms import BaseRagasLLM, InstructorBaseRagasLLM, LangchainLLMWrapper
 
-        self.llm = LangchainLLMWrapper(evaluator_llm)
+        self.llm: Any
+        if isinstance(evaluator_llm, InstructorBaseRagasLLM):
+            self.llm = evaluator_llm
+        elif isinstance(evaluator_llm, BaseLanguageModel):
+            self.llm = LangchainLLMWrapper(evaluator_llm)
+        elif isinstance(evaluator_llm, BaseRagasLLM):
+            # Legacy non-instructor Ragas LLM, might still work with some metrics
+            self.llm = evaluator_llm
+        else:
+            # Fallback for MagicMock or other types in tests
+            self.llm = evaluator_llm
+
         self.batch_size = batch_size
         self.timeout = timeout
 
@@ -283,7 +298,7 @@ class RAGASEvaluator:
         """
         try:
             from ragas import EvaluationDataset, RunConfig, evaluate
-            from ragas.metrics import (
+            from ragas.metrics.collections import (
                 AnswerRelevancy,
                 ContextPrecision,
                 ContextRecall,
@@ -293,9 +308,9 @@ class RAGASEvaluator:
             raise ImportError("RAGAS is not installed. Install with: uv add ragas") from e
 
         # Map metric names to RAGAS metrics
-        from langchain_huggingface import HuggingFaceEmbeddings
+        from ragas.embeddings import HuggingFaceEmbeddings
 
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        embeddings = HuggingFaceEmbeddings(model="sentence-transformers/all-MiniLM-L6-v2")
 
         metric_map = {
             "faithfulness": Faithfulness(llm=self.llm),
@@ -339,26 +354,22 @@ class RAGASEvaluator:
 
         with ThreadPoolExecutor() as executor:
             from ragas.dataset_schema import EvaluationResult
-        result = await loop.run_in_executor(
-            executor,
+
+        # Use functools.partial to wrap evaluate with its arguments
+        # This helps Mypy and ensures correct execution in the thread pool
+        eval_func = functools.partial(
             evaluate,
-            dataset,
-            selected_metrics,
-            None,  # llm (already wrapped in metrics)
-            None,  # embeddings
-            None,  # experiment_name
-            None,  # callbacks
-            run_config,
-            None,  # token_usage_parser
-            False,  # raise_exceptions
-            None,  # column_map
-            True,  # show_progress
-            None,  # batch_size
-            None,  # _run_id
-            None,  # _pbar
-            False,  # return_executor
-            True,  # allow_nest_asyncio
+            dataset=dataset,
+            metrics=cast(Any, selected_metrics),
+            llm=None,
+            embeddings=None,
+            callbacks=None,
+            run_config=run_config,
+            show_progress=True,
+            allow_nest_asyncio=True,
         )
+
+        result = await loop.run_in_executor(executor, eval_func)
 
         # Convert to dict
         results_df = cast(EvaluationResult, result).to_pandas()
@@ -425,6 +436,8 @@ def create_evaluator_from_settings(
     # Load environment variables from .env
     load_dotenv()
 
+    evaluator_llm: Any = None
+
     if llm_provider == "deepseek":
         api_key = os.getenv("DEEPSEEK_API_KEY")
         if not api_key:
@@ -433,12 +446,11 @@ def create_evaluator_from_settings(
                 "Set it in .env or export DEEPSEEK_API_KEY=..."
             )
 
-        evaluator_llm = ChatOpenAI(
-            model="deepseek-chat",
-            api_key=cast(Any, api_key),
-            base_url="https://api.deepseek.com",
-            temperature=0.0,  # Critical for evaluation!
-        )
+        from openai import OpenAI
+        from ragas.llms import llm_factory
+
+        client = OpenAI(api_key=api_key, base_url="https://api.deepseek.com")
+        evaluator_llm = llm_factory(model="deepseek-chat", client=client, temperature=0.0)
 
         logger.info("Using DeepSeek API for RAGAS evaluation")
 
@@ -450,11 +462,11 @@ def create_evaluator_from_settings(
                 "Set it in .env or export OPENAI_API_KEY=..."
             )
 
-        evaluator_llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=cast(Any, api_key),
-            temperature=0.0,  # Critical for evaluation!
-        )
+        from openai import OpenAI
+        from ragas.llms import llm_factory
+
+        client = OpenAI(api_key=api_key)
+        evaluator_llm = llm_factory(model="gpt-4o-mini", client=client, temperature=0.0)
 
         logger.info("Using OpenAI GPT-4o-mini for RAGAS evaluation")
 

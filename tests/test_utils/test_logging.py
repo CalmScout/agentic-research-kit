@@ -1,4 +1,5 @@
 from unittest.mock import patch
+
 from src.utils.config import get_settings
 from src.utils.logger import get_logger, setup_logging
 

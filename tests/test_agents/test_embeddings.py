@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 from src.agents.embeddings import EmbeddingService
+
 
 @pytest.fixture
 def service():

@@ -41,12 +41,13 @@ async def test_setup_observability_import_error():
 
     with patch.dict(os.environ, {"PHOENIX_ENABLED": "true"}):
         with patch("phoenix.otel.register", side_effect=ImportError("No module named 'phoenix'")):
-            import src.utils.observability
-            src.utils.observability._observability_initialized = False
+            with patch("socket.create_connection") as mock_socket:
+                import src.utils.observability
+                src.utils.observability._observability_initialized = False
 
-            setup_observability()
+                setup_observability()
 
-            assert src.utils.observability._observability_initialized is False
+                assert src.utils.observability._observability_initialized is False
 
     # Clean up settings cache after test
     clear_settings_cache()

@@ -16,8 +16,8 @@ from pathlib import Path
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from data_ingestion.universal_pipeline import UniversalIngestionPipeline
 from agents.workflow import query_with_agents
+from data_ingestion.universal_pipeline import UniversalIngestionPipeline
 
 
 async def main():
@@ -49,7 +49,7 @@ async def main():
             recursive=True
         )
 
-        print(f"\n✅ Ingestion Complete:")
+        print("\n✅ Ingestion Complete:")
         print(f"   - Files processed: {stats['successful_files']}")
         print(f"   - Total chunks: {stats['total_chunks']}")
         print(f"   - Items ingested: {stats['ingest_stats']['total_items']}")
@@ -84,7 +84,7 @@ async def main():
                 debug=False
             )
 
-            print(f"\n📊 Response:")
+            print("\n📊 Response:")
             print(f"   {result['response'][:500]}...")  # Show first 500 chars
             print(f"\n   Confidence: {result['confidence']:.1%}")
             print(f"   Sources: {len(result.get('sources', []))} documents")
@@ -117,13 +117,13 @@ async def main():
             debug=False
         )
 
-        print(f"\n📊 Analysis Results:")
+        print("\n📊 Analysis Results:")
         print(f"   {result['response']}")
         print(f"\n   Confidence: {result['confidence']:.1%}")
 
         # Show top sources
         if result.get('sources'):
-            print(f"\n   Top Sources:")
+            print("\n   Top Sources:")
             for j, source in enumerate(result['sources'][:5], 1):
                 title = source.get('title', source.get('content', 'N/A'))[:60]
                 print(f"      {j}. {title}...")

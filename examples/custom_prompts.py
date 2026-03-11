@@ -19,13 +19,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from agents.prompts import (
     PromptTemplate,
-    get_template,
-    register_template,
-    load_template_from_file,
     list_templates,
+    load_template_from_file,
+    register_template,
 )
 from agents.workflow import query_with_agents
-
 
 # ============================================================================
 # Example 1: Using Built-in Templates
@@ -137,7 +135,7 @@ Begin your literature review directly."""
         query=query,
         prompt_template="literature_review"
     )
-    print(f"\n📊 Response:")
+    print("\n📊 Response:")
     print(f"   {result['response'][:400]}...")
 
     # -----------------------------------------------------------------------
@@ -190,7 +188,7 @@ Begin your trend analysis directly."""
         query=query,
         prompt_template="trend_analysis"
     )
-    print(f"\n📊 Response:")
+    print("\n📊 Response:")
     print(f"   {result['response'][:400]}...")
 
 
@@ -312,7 +310,7 @@ Begin your response directly."""
         query=query,
         prompt_template="biomedical"
     )
-    print(f"\n📊 Biomedical Research Response:")
+    print("\n📊 Biomedical Research Response:")
     print(f"   {result['response'][:400]}...")
 
 

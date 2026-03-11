@@ -1,10 +1,10 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
 from src.data_ingestion.generic_rag_ingester import GenericRAGIngester
+
 
 @pytest.fixture
 def mock_embedding_model():

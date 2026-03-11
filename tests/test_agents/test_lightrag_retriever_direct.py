@@ -1,18 +1,21 @@
 from unittest.mock import AsyncMock, MagicMock, patch
+
 import numpy as np
 import pytest
+
 from src.agents.direct_lightrag_retriever import (
     DirectLightRAGRetriever,
     _patched_get_storage_class,
-    get_direct_lightrag_retriever,
     direct_hf_embedding_wrapper,
-    direct_hf_llm_wrapper
+    direct_hf_llm_wrapper,
+    get_direct_lightrag_retriever,
 )
 from src.agents.lancedb_storage import (
     LanceDBDocStatusStorage,
     LanceDBKVStorage,
     LanceDBVectorDBStorage,
 )
+
 
 @pytest.fixture
 def retriever():
@@ -32,12 +35,12 @@ async def test_direct_hf_embedding_wrapper():
     """Test the standalone embedding wrapper."""
     mock_model = MagicMock()
     mock_model.aembed_documents = AsyncMock(return_value=[[0.1] * 1024])
-    
+
     with patch("src.agents.direct_lightrag_retriever.OpenAIEmbeddings", return_value=mock_model):
         # Reset singleton for test
         import src.agents.direct_lightrag_retriever as dlr
         dlr._wrapper_embeddings = None
-        
+
         result = await direct_hf_embedding_wrapper(["text"])
         assert isinstance(result, np.ndarray)
         assert result.shape == (1, 1024)
@@ -48,12 +51,12 @@ async def test_direct_hf_llm_wrapper():
     """Test the standalone LLM wrapper."""
     mock_llm = MagicMock()
     mock_llm.ainvoke = AsyncMock(return_value=MagicMock(content='{"result": "ok"}'))
-    
+
     with patch("src.agents.direct_lightrag_retriever.ThinkingProcessStripper", return_value=mock_llm):
         # Reset singleton for test
         import src.agents.direct_lightrag_retriever as dlr
         dlr._wrapper_llm = None
-        
+
         result = await direct_hf_llm_wrapper("prompt")
         assert result == '{"result": "ok"}'
         mock_llm.ainvoke.assert_called_once()

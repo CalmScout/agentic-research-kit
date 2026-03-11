@@ -152,7 +152,11 @@ class IsolatedLightRAG:
             future: Future = asyncio.run_coroutine_threadsafe(wrapper(), self.loop)
             return future.result(timeout=timeout)
         except Exception as e:
-            logger.error(f"Error in background task: {e}")
+            # Suppress non-fatal initialization error from LightRAG internal background tasks
+            if "'list' object has no attribute 'get'" in str(e):
+                logger.debug(f"Suppressed non-fatal LightRAG initialization error: {e}")
+            else:
+                logger.error(f"Error in background task: {e}")
             raise
 
     def aquery_sync(

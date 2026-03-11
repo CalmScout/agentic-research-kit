@@ -9,6 +9,7 @@ Usage:
 """
 
 import asyncio
+
 from src.agents.workflow import query_with_agents
 
 
@@ -51,7 +52,7 @@ async def main():
                         title = source['chunks'][0].get('content', 'N/A')[:50] + "..."
                     else:
                         title = source.get('text', source.get('content', 'N/A'))[:50] + "..."
-                    
+
                     print(f"  {j}. {title}")
                     if source.get('score'):
                         print(f"     Relevance: {source['score']:.2f}")

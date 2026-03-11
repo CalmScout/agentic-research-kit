@@ -6,6 +6,7 @@ Adapts nanobot's two-layer memory pattern for RAG research use cases:
 """
 
 import logging
+from collections.abc import Mapping
 from datetime import datetime
 from pathlib import Path
 from typing import Any, cast
@@ -156,7 +157,7 @@ class MemoryStore:
     # -------------------------------------------------------------------------
 
     def append_query_history(
-        self, query: str, result: dict[str, Any], session_id: str | None = None
+        self, query: str, result: Mapping[str, Any], session_id: str | None = None
     ) -> None:
         """Log query with metrics to history file.
 

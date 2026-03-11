@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 """CLI interface for Agentic Research Kit (ARK)."""
 
-import click
-from pathlib import Path
 import sys
+from pathlib import Path
+
+import click
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "src"))
@@ -36,13 +37,12 @@ def query(query: str, mode: str, session: str, debug: bool, prompt_template: str
         ark query "Analyze this chart" --image ./chart.png
     """
     import asyncio
-    import logging
 
-    from src.agents.workflow import query_with_agents
     from src.agents.utils import format_response_for_display
+    from src.agents.workflow import query_with_agents
+    from src.utils.config import get_settings
     from src.utils.logger import setup_logging
     from src.utils.observability import setup_observability
-    from src.utils.config import get_settings
 
     # Override log level if debug flag is set
     if debug:
@@ -63,9 +63,9 @@ def query(query: str, mode: str, session: str, debug: bool, prompt_template: str
     try:
         # Pass image if provided
         result = asyncio.run(query_with_agents(
-            query=query, 
+            query=query,
             query_image=image,
-            retrieval_mode=mode, 
+            retrieval_mode=mode,
             debug=debug
         ))
 
@@ -83,7 +83,7 @@ def query(query: str, mode: str, session: str, debug: bool, prompt_template: str
 
         # Show additional info if debug
         if debug:
-            click.echo(f"\n📊 Metadata:")
+            click.echo("\n📊 Metadata:")
             click.echo(f"  Entities: {result.get('entities', [])}")
             click.echo(f"  Retrieved: {result.get('retrieved_count', 0)} docs")
             click.echo(f"  Session: {session}")
@@ -209,9 +209,11 @@ def evaluate(output: str, test_size: int, metrics: tuple, ragas_metrics: tuple, 
     import asyncio
     import json
     from pathlib import Path
+
     from dotenv import load_dotenv
-    from src.evaluation.simple_eval import evaluate_retrieval
+
     from src.agents.workflow import query_with_agents
+    from src.evaluation.simple_eval import evaluate_retrieval
 
     # Load environment variables
     load_dotenv()
@@ -278,7 +280,7 @@ def _display_evaluation_results(results: dict):
     # Display simple metrics
     if "simple" in results:
         simple = results["simple"]
-        click.echo(f"\n📈 Simple Metrics (Retrieval Quality)")
+        click.echo("\n📈 Simple Metrics (Retrieval Quality)")
         click.echo(f"Total queries: {simple.get('total_queries', 'N/A')}")
         click.echo(f"Successful queries: {simple.get('successful_queries', 'N/A')}")
         click.echo(f"Success rate: {simple.get('success_rate', 0):.2%}")
@@ -295,7 +297,7 @@ def _display_evaluation_results(results: dict):
     # Display RAGAS metrics
     if "ragas" in results:
         ragas = results["ragas"]
-        click.echo(f"\n🤖 RAGAS Metrics (LLM-Judged Quality)")
+        click.echo("\n🤖 RAGAS Metrics (LLM-Judged Quality)")
 
         if "config" in ragas:
             click.echo(f"  LLM Provider: {ragas['config'].get('metrics', 'N/A')}")
@@ -362,27 +364,46 @@ def serve(host: str, port: int, reload: bool):
 def gateway():
     """Start the research gateway (Telegram, etc.)."""
     import asyncio
-    from src.utils.config import get_settings
+
+    from src.agents.bus import MessageBus
     from src.agents.channels.manager import ChannelManager
     from src.agents.channels.telegram import TelegramChannel
-    
+    from src.agents.worker import AgentWorker
+    from src.utils.config import get_settings
+
     settings = get_settings()
-    manager = ChannelManager()
-    
+    bus = MessageBus()
+    worker = AgentWorker(bus)
+    manager = ChannelManager(bus)
+
     if settings.telegram_enabled:
         click.echo("🔌 Enabling Telegram channel...")
         manager.register_channel(TelegramChannel())
-    
+
     if not manager._channels:
         click.echo("⚠️  No channels enabled. Enable at least one channel in .env (e.g., TELEGRAM_ENABLED=true).")
         return
 
-    click.echo("🚀 Starting Research Gateway...")
+    async def run_gateway():
+        # Start worker and manager
+        await worker.start()
+        await manager.start()
+
+        # Keep running until interrupted
+        try:
+            while True:
+                await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            pass
+        finally:
+            await manager.stop()
+            await worker.stop()
+
+    click.echo("🚀 Starting Research Gateway (Hybrid Architecture)...")
     try:
-        asyncio.run(manager.start())
+        asyncio.run(run_gateway())
     except KeyboardInterrupt:
         click.echo("\n🛑 Stopping Gateway...")
-        asyncio.run(manager.stop())
 
 
 @cli.command()

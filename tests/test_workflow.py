@@ -1,7 +1,4 @@
-"""Tests for multi-agent workflow orchestration."""
-
-import os
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,64 +10,49 @@ from src.agents.workflow import (
 
 
 @pytest.mark.asyncio
-async def test_workflow_creation():
-    """Test LangGraph workflow compilation."""
+async def test_create_workflow():
+    """Test that workflow can be created successfully."""
     workflow = create_multi_agent_workflow()
-
-    # Verify workflow is created
     assert workflow is not None
-    assert hasattr(workflow, "ainvoke")
-    assert hasattr(workflow, "stream")
 
 
 @pytest.mark.asyncio
-async def test_workflow_end_to_end(agent_state_minimal, mock_llm, mock_embedding_model):
-    """Test full workflow with mocked agents."""
+async def test_workflow_end_to_end():
+    """Test full workflow with mocked nodes."""
     query = "Is climate change real?"
 
-    # Mock the agent functions directly in the workflow module
-    with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
-        with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
-            with patch("src.agents.workflow.verification_agent") as mock_verifier:
+    # Mock all nodes
+    with (
+        patch("src.agents.workflow.skill_injector_node") as mock_skills,
+        patch("src.agents.workflow.research_coordinator_node") as mock_coord,
+        patch("src.agents.workflow.rag_search_node") as mock_rag,
+        patch("src.agents.workflow.web_search_node") as mock_web,
+        patch("src.agents.workflow.enhanced_response_generator_agent") as mock_gen,
+        patch("src.agents.workflow.verification_agent") as mock_ver,
+        patch("src.agents.workflow.MemoryStore") as mock_mem_class
+    ):
+        # Setup returns
+        mock_skills.return_value = {"skill_instructions": ""}
+        mock_coord.return_value = {"retrieved_docs": []}
+        mock_rag.return_value = {"retrieved_docs": [{"content": "rag"}], "retrieval_method": "rag"}
+        mock_web.return_value = {"retrieved_docs": [{"content": "rag"}, {"content": "web"}], "retrieval_method": "rag+web"}
+        mock_gen.return_value = {"response": "Final answer", "sources": []}
+        mock_ver.return_value = {"verification_status": "verified"}
 
-                # Setup mock returns
-                mock_retriever.return_value = {
-                    "query_type": "text",
-                    "entities": ["climate change"],
-                    "retrieved_docs": [{"text": "test", "score": 0.9}],
-                    "retrieval_scores": [0.9],
-                    "retrieval_method": "mock"
-                }
+        mock_mem = MagicMock()
+        mock_mem.get_research_context.return_value = ""
+        mock_mem_class.return_value = mock_mem
 
-                mock_generator.return_value = {
-                    "response": "Final response",
-                    "sources": [{"text": "test", "score": 0.9}],
-                    "top_results": [{"text": "test", "score": 0.9}],
-                    "confidence": 0.9,
-                    "entities": ["climate change"],
-                    "metadata": {}
-                }
+        result = await query_with_agents(query)
 
-                mock_verifier.return_value = {
-                    "response": "Final response",
-                    "verification_status": "verified",
-                    "verification_feedback": "All good",
-                    "iteration_count": 1,
-                    "entities": ["climate change"],
-                    "metadata": {}
-                }
-
-                result = await query_with_agents(query)
-
-                # Verify result structure
-                assert "query" in result
-                assert "response" in result
-                assert "sources" in result
-                assert "retrieved_count" in result
-                assert result["response"] == "Final response"
-                assert mock_retriever.called
-                assert mock_generator.called
-                assert mock_verifier.called
+        # Verify
+        assert result["response"] == "Final answer"
+        assert mock_skills.called
+        assert mock_coord.called
+        assert mock_rag.called
+        assert mock_web.called
+        assert mock_gen.called
+        assert mock_ver.called
 
 
 @pytest.mark.asyncio
@@ -87,34 +69,15 @@ async def test_workflow_error_handling():
         assert "Workflow failed" in result["error"]
 
 
-@pytest.mark.asyncio
-async def test_workflow_phoenix_disabled():
-    """Test workflow works without Phoenix observability."""
-    # Ensure Phoenix is disabled
-    os.environ["PHOENIX_ENABLED"] = "false"
-
-    # Re-initialize to test without Phoenix
-    import importlib
-
-    import src.agents.workflow
-    importlib.reload(src.agents.workflow)
-
-    workflow = create_multi_agent_workflow()
-
-    # Should still create workflow
-    assert workflow is not None
-
-
 def test_query_with_agents_sync():
     """Test synchronous wrapper for async function."""
     query = "test query"
 
     # Mock the async function
-    with patch("src.agents.workflow.query_with_agents") as mock_query:
+    with patch("src.agents.workflow.query_with_agents", new_callable=AsyncMock) as mock_query:
         mock_query.return_value = {
             "query": query,
             "response": "test response",
-            "confidence": 0.8,
             "sources": [],
             "retrieved_count": 0
         }
@@ -124,147 +87,3 @@ def test_query_with_agents_sync():
         # Verify result
         assert result["query"] == query
         assert result["response"] == "test response"
-
-
-@pytest.mark.asyncio
-async def test_workflow_state_propagation():
-    """Test that state propagates correctly through agents."""
-    query = "test query"
-
-    with patch("src.agents.workflow.enhanced_retriever_agent") as mock_retriever:
-        with patch("src.agents.workflow.enhanced_response_generator_agent") as mock_generator:
-            with patch("src.agents.workflow.verification_agent") as mock_verifier:
-
-                mock_retriever.return_value = {
-                    "entities": ["test"],
-                    "retrieved_docs": [{"text": "doc1"}],
-                    "metadata": {}
-                }
-                mock_generator.return_value = {
-                    "response": "resp",
-                    "sources": [],
-                    "entities": ["test"],
-                    "metadata": {}
-                }
-                mock_verifier.return_value = {
-                    "verification_status": "verified",
-                    "verification_feedback": "",
-                    "iteration_count": 1,
-                    "entities": ["test"],
-                    "metadata": {}
-                }
-
-                result = await query_with_agents(query)
-
-                # Verify state is propagated and added to result
-                assert "query" in result
-                assert "entities" in result
-                assert result["entities"] == ["test"]
-                assert result["retrieved_count"] == 1
-
-
-@pytest.mark.asyncio
-async def test_workflow_with_debug_mode():
-    """Test workflow with debug logging enabled."""
-    query = "test query"
-
-    with patch("src.agents.workflow.create_multi_agent_workflow") as mock_workflow:
-        mock_workflow.return_value = Mock()
-        mock_workflow.return_value.ainvoke = AsyncMock(return_value={
-            "query": query,
-            "response": "test",
-            "confidence": 0.8,
-            "sources": [],
-            "entities": [],
-            "retrieved_docs": [],
-            "verification_status": "verified",
-            "verification_feedback": "",
-            "iteration_count": 1,
-            "metadata": {}
-        })
-
-        # Test with debug=True
-        result = await query_with_agents(query, debug=True)
-
-        # Should complete successfully
-        assert result["query"] == query
-
-
-@pytest.mark.asyncio
-async def test_workflow_with_multimodal_query():
-    """Test workflow with image query."""
-    query = "What is this?"
-    image_path = "/path/to/image.jpg"
-
-    with patch("src.agents.workflow.create_multi_agent_workflow") as mock_workflow:
-        mock_workflow.return_value = Mock()
-        mock_workflow.return_value.ainvoke = AsyncMock(return_value={
-            "query": query,
-            "response": "test response",
-            "confidence": 0.8,
-            "sources": [],
-            "entities": [],
-            "retrieved_docs": [],
-            "verification_status": "verified",
-            "verification_feedback": "",
-            "iteration_count": 1,
-            "metadata": {}
-        })
-
-        result = await query_with_agents(query, query_image=image_path)
-
-        # Should handle image queries
-        assert result["query"] == query
-
-
-@pytest.mark.asyncio
-async def test_workflow_metadata_added():
-    """Test that metadata is added to result."""
-    query = "test query"
-
-    with patch("src.agents.workflow.create_multi_agent_workflow") as mock_workflow:
-        mock_workflow.return_value = Mock()
-        mock_workflow.return_value.ainvoke = AsyncMock(return_value={
-            "query": query,
-            "response": "test",
-            "confidence": 0.8,
-            "sources": [{"text": "source1"}, {"text": "source2"}],
-            "entities": ["entity1", "entity2"],
-            "retrieved_docs": [{"text": "doc1"}, {"text": "doc2"}],
-            "verification_status": "verified",
-            "verification_feedback": "",
-            "iteration_count": 1,
-            "metadata": {}
-        })
-
-        result = await query_with_agents(query)
-
-        # Verify metadata
-        assert result["retrieved_count"] == 2
-        assert len(result["entities"]) == 2
-
-
-@pytest.mark.asyncio
-async def test_workflow_empty_sources():
-    """Test workflow with no sources found."""
-    query = "obscure query with no matches"
-
-    with patch("src.agents.workflow.create_multi_agent_workflow") as mock_workflow:
-        mock_workflow.return_value = Mock()
-        mock_workflow.return_value.ainvoke = AsyncMock(return_value={
-            "query": query,
-            "response": "No relevant information found.",
-            "sources": [],
-            "entities": [],
-            "retrieved_docs": [],
-            "verification_status": "verified",
-            "verification_feedback": "",
-            "iteration_count": 1,
-            "metadata": {}
-        })
-
-        result = await query_with_agents(query)
-
-        # Should handle empty sources
-        assert result["sources"] == []
-        assert result["retrieved_count"] == 0

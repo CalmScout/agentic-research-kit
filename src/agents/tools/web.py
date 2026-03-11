@@ -247,6 +247,22 @@ class WebFetchTool(Tool):
             if truncated:
                 text = text[:limit]
 
+            # --- ADD JUNK DETECTION ---
+            # If the content is mostly gibberish (e.g. anti-bot payloads), discard it.
+            # We check the ratio of alphanumeric characters to total characters.
+            if len(text) > 100:
+                alnum_count = sum(1 for c in text if c.isalnum() or c.isspace())
+                ratio = alnum_count / len(text)
+                if ratio < 0.7:  # If more than 30% is symbols/garbage
+                    logger.warning(
+                        f"Discarding suspected garbage/obfuscated content from {url} (ratio: {ratio:.2f})"
+                    )
+                    return json.dumps(
+                        {"error": "Content appeared to be obfuscated or corrupted", "url": url},
+                        ensure_ascii=False,
+                    )
+            # ---------------------------
+
             return json.dumps(
                 {
                     "url": url,
@@ -260,7 +276,7 @@ class WebFetchTool(Tool):
                 ensure_ascii=False,
             )
         except Exception as e:
-            logger.error(f"Web fetch failed for {url}: {e}")
+            logger.warning(f"Web fetch failed for {url}: {e}")
             return json.dumps({"error": str(e), "url": url}, ensure_ascii=False)
 
     def _to_markdown(self, html_content: str) -> str:

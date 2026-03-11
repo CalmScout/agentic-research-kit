@@ -1,5 +1,7 @@
 from unittest.mock import MagicMock, patch
+
 from src.agents.reranker import Qwen3VLReranker, get_reranker
+
 
 def test_reranker_basic():
     # Mock httpx.post to fail so we test fallback
@@ -25,7 +27,7 @@ def test_reranker_api_success():
         {"index": 1, "score": 0.9},
         {"index": 2, "score": 0.5}
     ]
-    
+
     with patch("httpx.post", return_value=mock_response):
         reranker = Qwen3VLReranker(top_k=2)
         docs = [

@@ -9,15 +9,16 @@ Usage:
 """
 
 import asyncio
-from typing import TypedDict, List, Dict, Any
+from typing import Any, TypedDict
+
 from langchain_core.language_model.chat_models import BaseChatModel
 
 
 class CustomAgentState(TypedDict):
     """State for custom agent workflow."""
     query: str
-    entities: List[str]
-    retrieved_docs: List[Dict[str, Any]]
+    entities: list[str]
+    retrieved_docs: list[dict[str, Any]]
     analysis: str
     response: str
 

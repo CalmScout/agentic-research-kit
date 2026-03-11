@@ -49,6 +49,8 @@ class BaseAgentState(TypedDict):
     query_image: str | None
     retrieval_mode: str | None  # LightRAG mode: naive, local, global, hybrid
     memory_context: str | None  # Research context from memory store
+    requested_skills: NotRequired[list[str]]  # List of skill names to load
+    skill_instructions: NotRequired[str]  # Combined instructions from skills
     session_id: NotRequired[str | None]
     metadata: NotRequired[dict[str, Any]]
 

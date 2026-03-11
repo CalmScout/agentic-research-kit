@@ -247,6 +247,12 @@ async def enhanced_response_generator_agent(
                     memory_context=memory_context,
                 )
 
+                # Inject dynamic skills if provided
+                skill_instructions = state.get("skill_instructions", "")
+                if skill_instructions:
+                    logger.info("Injecting dynamic skill instructions into system prompt")
+                    full_prompt = f"{skill_instructions}\n\n{full_prompt}"
+
                 # ADD EXTRA EMPHASIS ON SOURCE COUNT
                 source_count_warning = f"\n\nIMPORTANT: There are ONLY {len(top_sources)} sources provided above. Do NOT cite any Source number greater than {len(top_sources)}."
                 full_prompt += source_count_warning

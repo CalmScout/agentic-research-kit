@@ -8,11 +8,12 @@ Usage:
     uv run python examples/batch_ingest.py --dataset path/to/your/data.csv --max-items 100
 """
 
-import asyncio
 import argparse
+import asyncio
 from pathlib import Path
-from tqdm import tqdm
+
 import pandas as pd
+
 from src.data_ingestion.universal_pipeline import run_universal_pipeline
 
 
@@ -76,11 +77,11 @@ async def main():
         successful = 0
         failed = 0
 
-        # Note: In a real batch scenario, we might use the universal pipeline 
+        # Note: In a real batch scenario, we might use the universal pipeline
         # or call the RAG instance directly.
-        # For this example, we'll demonstrate using the universal pipeline 
+        # For this example, we'll demonstrate using the universal pipeline
         # which already handles file processing.
-        
+
         # If it's a CSV, the universal pipeline can handle it
         stats = run_universal_pipeline(
             input_path=str(dataset_path),
@@ -104,7 +105,7 @@ async def main():
                 import json
                 with open(vdb_file) as f:
                     vdb_data = json.load(f)
-                    print(f"📊 Storage Statistics:")
+                    print("📊 Storage Statistics:")
                     # Check for different possible key names in vdb_chunks.json
                     count = len(vdb_data.get('storage', vdb_data.get('matrix', [])))
                     print(f"  - Vector embeddings: {count}")

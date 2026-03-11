@@ -12,14 +12,13 @@ Use Case: When you have documents in a format not natively supported by ARK.
 import asyncio
 import sys
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import Any
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from data_ingestion.document_loaders import DocumentLoader, register_template, LOADER_REGISTRY
+from data_ingestion.document_loaders import LOADER_REGISTRY, DocumentLoader
 from data_ingestion.universal_pipeline import UniversalIngestionPipeline
-
 
 # ============================================================================
 # Example 1: Custom JSON Document Loader
@@ -44,7 +43,7 @@ class JSONDataLoader(DocumentLoader):
     ]
     """
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load JSON documents."""
         import json
 
@@ -52,7 +51,7 @@ class JSONDataLoader(DocumentLoader):
         docs = []
 
         try:
-            with open(path_obj, 'r', encoding='utf-8') as f:
+            with open(path_obj, encoding='utf-8') as f:
                 data = json.load(f)
 
             # Handle both list and single object
@@ -103,13 +102,13 @@ class MarkdownWithFrontmatterLoader(DocumentLoader):
     The document content goes here...
     """
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load Markdown with frontmatter."""
         path_obj = self._validate_path(path)
         docs = []
 
         try:
-            with open(path_obj, 'r', encoding='utf-8') as f:
+            with open(path_obj, encoding='utf-8') as f:
                 content = f.read()
 
             # Parse frontmatter
@@ -210,7 +209,7 @@ async def example_custom_loaders():
             recursive=True
         )
 
-        print(f"\n✅ Ingestion Complete:")
+        print("\n✅ Ingestion Complete:")
         print(f"   - Files processed: {stats['successful_files']}")
         print(f"   - Total chunks: {stats['total_chunks']}")
         print(f"   - Items ingested: {stats['ingest_stats']['total_items']}")
@@ -232,7 +231,7 @@ class APIResponseLoader(DocumentLoader):
     This loader handles API responses that have been saved to files.
     """
 
-    def load(self, path: str) -> List[Dict[str, Any]]:
+    def load(self, path: str) -> list[dict[str, Any]]:
         """Load API response documents."""
         import json
 
@@ -240,7 +239,7 @@ class APIResponseLoader(DocumentLoader):
         docs = []
 
         try:
-            with open(path_obj, 'r', encoding='utf-8') as f:
+            with open(path_obj, encoding='utf-8') as f:
                 data = json.load(f)
 
             # Handle different API response structures

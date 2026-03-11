@@ -44,7 +44,7 @@ Designed as a rigorous research synthesis tool, ARK shifts the paradigm from sim
 
 ## 🧠 Core Architecture
 
-ARK implements a sequential 3-agent loop designed to minimize hallucination and maximize evidence grounding. This workflow operates using a natively unified multimodal engine (`Qwen3.5-4B`), which allows a single model instance to seamlessly analyze both text and visual inputs within a strict 12GB local VRAM footprint.
+ARK implements a sequential 3-agent loop designed to minimize hallucination and maximize evidence grounding. This core workflow is wrapped in a **Hybrid Event-Driven Architecture** (adapting patterns from `@nanobot`), which merges the predictability of LangGraph with an asynchronous Message Bus. This enables temporal autonomy, dynamic skills, and hardware-aware scaling from a local 12GB VRAM GPU up to multi-tenant cloud APIs.
 
 1.  **Enhanced Retriever (Agent 1): The Researcher**
     *   Analyzes query modality (text/image) using the unified reasoning engine.
@@ -136,22 +136,24 @@ Enable asynchronous, multi-channel communication (e.g., Telegram).
 
 ## 📅 Roadmap
 
-ARK is transitioning from a synchronous RAG pipeline to an event-driven agent architecture:
+ARK is transitioning from a synchronous RAG pipeline to a hybrid, event-driven agent architecture:
 
 *   ✅ **Phase 1: Extensibility**: MCP Client implementation and dynamic tool loading.
 *   ✅ **Phase 2: Performance & Integrity**: LanceDB migration and Verification Node (Critique).
 *   ✅ **Phase 3: Research Scope Expansion**: Integrated Web Search and Proactive Research.
-*   ✅ **Phase 3.5: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
-*   ✅ **Phase 4: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
-*   ✅ **Phase 5: High-Fidelity Research Memory**: Semantic research store in LanceDB and memory hardening.
-*   🔄 **Phase 6: Interface & Asynchronicity**: Multi-Channel Gateway (Telegram) and Message Bus integration (In Progress).
-*   ⬜ **Phase 7: Temporal Autonomy**: Cron services and self-waking research tasks.
+*   ✅ **Phase 4: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
+*   ✅ **Phase 5: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
+*   ✅ **Phase 6: High-Fidelity Research Memory**: Semantic research store in LanceDB and memory hardening.
+*   🔄 **Phase 7: Interface, Asynchronicity & Subgraphs**: Async Message Bus integration and Hardware-Aware LangGraph Subgraphs for specialized delegation (In Progress).
+*   ⬜ **Phase 8: Temporal Autonomy & Scalability**: Cron services, Heartbeat Service (Self-Waking), and Tenant Isolation for multi-user routing.
+*   ⬜ **Phase 9: Advanced Agentic Capabilities**: Markdown-Driven Skills System (`SKILL.md`) and Session Management.
 
 ## 📚 Documentation
 
 Detailed technical guides are available in the `docs/` directory:
 
 - **[Architecture Diagrams](docs/ARCHITECTURE_DIAGRAMS.md)**: Visual deep-dive into the 3-agent research flow.
+- **[Hybrid Event-Driven Architecture](docs/ARK_NANOBOT_ARCHITECTURE.md)**: Details on the integration of Nanobot patterns with LangGraph.
 - **[Qwen3.5 Research & Roadmap](docs/QWEN35_ARCHITECTURE_RESEARCH.md)**: Detailed reasoning behind the unified model consolidation and future vLLM scaling plans.
 - **[LightRAG Integration](docs/LIGHTRAG_INTEGRATION.md)**: Details on hybrid retrieval and LanceDB storage.
 - **[Logging Infrastructure](docs/LOGGING.md)**: Details on structured logging and log management.

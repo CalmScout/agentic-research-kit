@@ -131,10 +131,17 @@ async def test_evaluate_workflow(mock_run, mock_collect, evaluator):
     assert results["config"]["test_size"] == 1
 
 def test_create_evaluator_from_settings_openai():
-    with patch("os.getenv") as mock_env, \
+    # Targeted mock to avoid side effects on other env vars (like RAGAS_APP_DIR)
+    def mock_getenv(key, default=None):
+        if key in ["OPENAI_API_KEY", "RAGAS_OPENAI_API_KEY"]:
+            return "fake-key"
+        return None
+
+    with patch("os.getenv", side_effect=mock_getenv), \
          patch("src.evaluation.ragas_evaluator.ChatOpenAI"), \
-         patch("src.evaluation.ragas_evaluator.RAGASEvaluator"):
-        mock_env.return_value = "fake-key"
+         patch("src.evaluation.ragas_evaluator.RAGASEvaluator"), \
+         patch("openai.OpenAI"), \
+         patch("ragas.llms.llm_factory"):
 
         evaluator = create_evaluator_from_settings(llm_provider="openai")
         assert evaluator is not None

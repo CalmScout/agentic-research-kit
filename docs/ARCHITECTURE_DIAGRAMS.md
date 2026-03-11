@@ -2,6 +2,8 @@
 
 This document provides visual representations of the system architecture using Mermaid diagrams.
 
+> **Note:** For diagrams covering the new Hybrid Event-Driven Architecture (Message Bus, Worker, and Skills), please refer to [ARK_NANOBOT_ARCHITECTURE.md](ARK_NANOBOT_ARCHITECTURE.md).
+
 ---
 
 ## Table of Contents
@@ -285,4 +287,4 @@ flowchart TB
 
 ---
 
-**Last Updated**: 2026-03-04 (Updated for ReAct loop integration and Unified Qwen3.5 model)
+**Last Updated**: 2026-03-11 (Updated with reference to the new Hybrid Event-Driven Architecture)

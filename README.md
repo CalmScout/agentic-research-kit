@@ -144,9 +144,9 @@ ARK is transitioning from a synchronous RAG pipeline to a hybrid, event-driven a
 *   ✅ **Phase 4: Hardening & Evaluation**: RAGAS evaluation pipeline and 90% test coverage.
 *   ✅ **Phase 5: Cognitive Intelligence**: Iterative ReAct reasoning loops and unified `Qwen3.5` local model consolidation.
 *   ✅ **Phase 6: High-Fidelity Research Memory**: Semantic research store in LanceDB and memory hardening.
-*   🔄 **Phase 7: Interface, Asynchronicity & Subgraphs**: Async Message Bus integration and Hardware-Aware LangGraph Subgraphs for specialized delegation (In Progress).
+*   ✅ **Phase 7: Interface, Asynchronicity & Subgraphs**: Async Message Bus integration and Hardware-Aware LangGraph Subgraphs for specialized delegation.
 *   ⬜ **Phase 8: Temporal Autonomy & Scalability**: Cron services, Heartbeat Service (Self-Waking), and Tenant Isolation for multi-user routing.
-*   ⬜ **Phase 9: Advanced Agentic Capabilities**: Markdown-Driven Skills System (`SKILL.md`) and Session Management.
+*   ✅ **Phase 9: Advanced Agentic Capabilities**: Markdown-Driven Skills System (`SKILL.md`) and Session Management.
 
 ## 📚 Documentation
 
